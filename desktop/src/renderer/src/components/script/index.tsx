@@ -1,27 +1,20 @@
 /**
  * components/script/index.tsx
- *
- * Single-editor script panel with:
- *  - Language selector (DSL / JavaScript / Python)
- *  - Built-in examples per language
- *  - File browser with folder support (type "folder/name" to save into a folder)
- *  - Monaco editor wired to local monaco-editor package (no CDN = no CSP hang)
  */
 
-import { ReactElement, useEffect, useRef, useState } from 'react'
+import { ReactElement, useEffect, useRef, useState, useCallback } from 'react'
 import { Modal, Tooltip } from 'antd'
 import clsx from 'clsx'
 import {
   CircleStopIcon, FileCodeIcon, FolderIcon, FolderOpenIcon,
-  PauseIcon, PlayIcon, SaveIcon, ChevronRightIcon,
-  Trash2Icon, BookOpenIcon, ChevronDownIcon,
+  PauseIcon, PlayIcon, SaveIcon, Trash2Icon, BookOpenIcon,
+  ChevronDownIcon, PinIcon, PinOffIcon, AlertTriangleIcon,
 } from 'lucide-react'
 import Editor, { loader, useMonaco } from '@monaco-editor/react'
 import * as monaco from 'monaco-editor'
 import { IpcEvents } from '@common/ipc-events'
+import { getSidebarPins, setSidebarPins } from '@renderer/libs/storage'
 
-// Point the loader at the locally installed package — bypasses CDN fetch
-// which hangs in Electron due to CSP restrictions.
 loader.config({ monaco })
 
 // ---------------------------------------------------------------------------
@@ -32,6 +25,7 @@ type ScriptType   = 'dsl' | 'js' | 'python'
 type ScriptStatus = 'idle' | 'running' | 'paused' | 'done' | 'error'
 type SavedScript  = { filename: string; displayName: string; type: ScriptType; folder: string }
 type LogEntry     = { id: number; text: string; kind: 'log' | 'error' | 'info' }
+type PendingLoad  = { source: string; type: ScriptType } | null
 
 const LANG_LABEL:  Record<ScriptType, string> = { dsl: 'DSL', js: 'JavaScript', python: 'Python' }
 const MONACO_LANG: Record<ScriptType, string> = { dsl: 'plaintext', js: 'javascript', python: 'python' }
@@ -48,7 +42,7 @@ const STATUS_COLOR: Record<ScriptStatus, string> = {
 }
 
 // ---------------------------------------------------------------------------
-// Built-in examples
+// Examples
 // ---------------------------------------------------------------------------
 
 type Example = { label: string; source: string }
@@ -121,11 +115,9 @@ kvm.log('Done')
     },
     {
       label: 'Mouse grid click',
-      source: `// Click a 3x3 grid of points (absolute coords)
-const points = [
+      source: `const points = [
   [400, 300], [800, 300], [1200, 300],
   [400, 600], [800, 600], [1200, 600],
-  [400, 900], [800, 900], [1200, 900],
 ]
 for (const [x, y] of points) {
   await kvm.mouseMove(x, y, 'abs')
@@ -155,7 +147,6 @@ path = kvm.screenshot()
 img = Image.open(path)
 kvm.log(f'Screen: {img.size[0]}x{img.size[1]}')
 
-# Example: check if a pixel is red-ish
 r, g, b = img.getpixel((100, 100))[:3]
 kvm.log(f'Pixel at (100,100): R={r} G={g} B={b}')
 `,
@@ -169,7 +160,6 @@ import numpy as np
 path = kvm.screenshot()
 img = np.array(Image.open(path))
 
-# Find pixels where red > 200, green < 100, blue < 100
 mask = (img[:,:,0] > 200) & (img[:,:,1] < 100) & (img[:,:,2] < 100)
 ys, xs = np.where(mask)
 
@@ -210,6 +200,59 @@ kvm.log('Done')
   ],
 }
 
+const DEFAULT_SOURCE = EXAMPLES.dsl[0].source
+
+// ---------------------------------------------------------------------------
+// Confirm-load modal
+// ---------------------------------------------------------------------------
+
+function ConfirmLoadModal({
+  open,
+  what,
+  onConfirm,
+  onCancel,
+}: {
+  open: boolean
+  what: string
+  onConfirm: () => void
+  onCancel: () => void
+}): ReactElement {
+  return (
+    <Modal
+      open={open}
+      footer={null}
+      onCancel={onCancel}
+      width={380}
+      closable={false}
+      styles={{ content: { background: '#1a1a1a' }, mask: { background: 'rgba(0,0,0,0.7)' } }}
+    >
+      <div className="flex flex-col gap-4 p-2">
+        <div className="flex items-center gap-2 text-yellow-400">
+          <AlertTriangleIcon size={18} />
+          <span className="font-medium">Unsaved changes</span>
+        </div>
+        <p className="text-sm text-neutral-300">
+          Loading <span className="text-white font-medium">"{what}"</span> will overwrite your current unsaved edits.
+        </p>
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={onCancel}
+            className="rounded border border-neutral-700 px-3 py-1.5 text-sm text-neutral-300 hover:bg-neutral-800"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className="rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-500"
+          >
+            Load anyway
+          </button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -220,7 +263,8 @@ export const Script = (): ReactElement => {
   const monacoInstance = useMonaco()
 
   const [isOpen, setIsOpen]         = useState(false)
-  const [source, setSource]         = useState(EXAMPLES.dsl[0].source)
+  const [source, setSource]         = useState(DEFAULT_SOURCE)
+  const [isDirty, setIsDirty]       = useState(false)
   const [scriptType, setScriptType] = useState<ScriptType>('dsl')
   const [status, setStatus]         = useState<ScriptStatus>('idle')
   const [progress, setProgress]     = useState({ line: 0, total: 0 })
@@ -230,14 +274,18 @@ export const Script = (): ReactElement => {
   const [openFolders, setOpenFolders] = useState<Set<string>>(new Set(['']))
   const [showExamples, setShowExamples] = useState(false)
   const [showFiles, setShowFiles]   = useState(true)
+  const [pins, setPins]             = useState<string[]>(() => getSidebarPins())
+
+  // Confirm-load state: holds the pending load payload until user confirms
+  const [pendingLoad, setPendingLoad] = useState<PendingLoad>(null)
+  const [confirmWhat, setConfirmWhat] = useState('')
 
   const consoleRef = useRef<HTMLDivElement>(null)
 
-  // Register DSL syntax + theme once Monaco is ready
+  // Register DSL syntax + theme
   useEffect(() => {
     if (!monacoInstance) return
     if (monacoInstance.languages.getLanguages().some((l) => l.id === 'kvmscript')) return
-
     monacoInstance.languages.register({ id: 'kvmscript' })
     monacoInstance.languages.setMonarchTokensProvider('kvmscript', {
       keywords: ['type', 'key', 'delay', 'mouse', 'repeat', 'end', 'log', 'screenshot'],
@@ -301,6 +349,44 @@ export const Script = (): ReactElement => {
     })
   }
 
+  /** Apply a load immediately — no dirty check. */
+  function applyLoad(newSource: string, newType: ScriptType): void {
+    setSource(newSource)
+    setScriptType(newType)
+    setIsDirty(false)
+  }
+
+  /** Request a load — shows confirm dialog if editor is dirty. */
+  function requestLoad(newSource: string, newType: ScriptType, label: string): void {
+    if (isDirty) {
+      setPendingLoad({ source: newSource, type: newType })
+      setConfirmWhat(label)
+    } else {
+      applyLoad(newSource, newType)
+    }
+  }
+
+  function confirmLoad(): void {
+    if (pendingLoad) applyLoad(pendingLoad.source, pendingLoad.type)
+    setPendingLoad(null)
+  }
+
+  function cancelLoad(): void {
+    setPendingLoad(null)
+  }
+
+  // ── Pins ───────────────────────────────────────────────────────────────────
+
+  function togglePin(filename: string): void {
+    setPins(prev => {
+      const next = prev.includes(filename)
+        ? prev.filter(f => f !== filename)
+        : [...prev, filename]
+      setSidebarPins(next)
+      return next
+    })
+  }
+
   // ── Actions ────────────────────────────────────────────────────────────────
 
   async function handleRun(): Promise<void> {
@@ -319,17 +405,17 @@ export const Script = (): ReactElement => {
     if (r.ok) {
       addLog(`Saved "${name}"`, 'info')
       setSaveName('')
+      setIsDirty(false)
       loadSavedList()
     } else {
       addLog(`Save failed: ${r.error}`, 'error')
     }
   }
 
-  async function handleLoad(filename: string): Promise<void> {
+  async function handleLoad(filename: string, displayName: string): Promise<void> {
     const r = await window.electron.ipcRenderer.invoke(IpcEvents.SCRIPT_LOAD, filename)
     if (r.ok) {
-      setSource(r.source)
-      setScriptType(r.type)
+      requestLoad(r.source, r.type, displayName)
     } else {
       addLog(`Load failed: ${r.error}`, 'error')
     }
@@ -337,6 +423,8 @@ export const Script = (): ReactElement => {
 
   async function handleDelete(filename: string): Promise<void> {
     await window.electron.ipcRenderer.invoke(IpcEvents.SCRIPT_DELETE, filename)
+    // Remove from pins too
+    if (pins.includes(filename)) togglePin(filename)
     loadSavedList()
   }
 
@@ -345,11 +433,12 @@ export const Script = (): ReactElement => {
     loadSavedList()
   }
 
-  function loadExample(ex: Example): void {
-    setSource(ex.source)
+  function handleEditorChange(val: string | undefined): void {
+    setSource(val ?? '')
+    setIsDirty(true)
   }
 
-  // Group saved scripts by folder
+  // Group by folder
   const byFolder = savedScripts.reduce<Record<string, SavedScript[]>>((acc, s) => {
     ;(acc[s.folder] ??= []).push(s)
     return acc
@@ -379,6 +468,14 @@ export const Script = (): ReactElement => {
         </div>
       </Tooltip>
 
+      {/* Confirm overwrite dialog */}
+      <ConfirmLoadModal
+        open={pendingLoad !== null}
+        what={confirmWhat}
+        onConfirm={confirmLoad}
+        onCancel={cancelLoad}
+      />
+
       <Modal
         open={isOpen}
         onCancel={() => setIsOpen(false)}
@@ -388,13 +485,12 @@ export const Script = (): ReactElement => {
           <div className="flex items-center gap-2 text-white">
             <FileCodeIcon size={16} />
             <span>Scripts</span>
-            <span className={clsx('ml-2 text-xs font-normal capitalize', STATUS_COLOR[status])}>
+            {isDirty && <span className="text-xs text-yellow-500">● unsaved</span>}
+            <span className={clsx('ml-1 text-xs font-normal capitalize', STATUS_COLOR[status])}>
               {status}
             </span>
             {isBusy && progress.total > 0 && (
-              <span className="text-xs text-neutral-500">
-                {progress.line}/{progress.total}
-              </span>
+              <span className="text-xs text-neutral-500">{progress.line}/{progress.total}</span>
             )}
           </div>
         }
@@ -406,7 +502,7 @@ export const Script = (): ReactElement => {
       >
         <div className="flex h-[640px]">
 
-          {/* ── Sidebar ── */}
+          {/* ── Left sidebar ── */}
           <div className="flex w-52 flex-shrink-0 flex-col border-r border-neutral-800 overflow-hidden">
 
             {/* Language */}
@@ -445,7 +541,7 @@ export const Script = (): ReactElement => {
                   {EXAMPLES[scriptType].map((ex) => (
                     <button
                       key={ex.label}
-                      onClick={() => loadExample(ex)}
+                      onClick={() => requestLoad(ex.source, scriptType, ex.label)}
                       className="w-full px-4 py-1.5 text-left text-xs text-neutral-400 hover:bg-neutral-800 hover:text-white"
                     >
                       {ex.label}
@@ -478,24 +574,19 @@ export const Script = (): ReactElement => {
                   ) : (
                     folders.map((folder) => (
                       <div key={folder || '__root__'}>
-                        {/* Folder row — only show if it's a named folder */}
                         {folder !== '' && (
                           <button
                             onClick={() => toggleFolder(folder)}
                             className="flex w-full items-center gap-1.5 px-3 py-1 text-xs text-neutral-400 hover:text-white"
                           >
-                            {openFolders.has(folder)
-                              ? <FolderOpenIcon size={11} />
-                              : <FolderIcon size={11} />
-                            }
+                            {openFolders.has(folder) ? <FolderOpenIcon size={11} /> : <FolderIcon size={11} />}
                             <span className="truncate">{folder}</span>
                           </button>
                         )}
-                        {/* Files in folder */}
                         {(folder === '' || openFolders.has(folder)) && byFolder[folder].map((s) => (
                           <div key={s.filename} className="group flex items-center px-2">
                             <button
-                              onClick={() => handleLoad(s.filename)}
+                              onClick={() => handleLoad(s.filename, s.displayName)}
                               className={clsx(
                                 'flex flex-1 items-center gap-1.5 truncate rounded px-2 py-1 text-left text-xs hover:bg-neutral-800',
                                 folder !== '' && 'pl-4',
@@ -506,12 +597,28 @@ export const Script = (): ReactElement => {
                               </span>
                               <span className="truncate text-neutral-300">{s.displayName}</span>
                             </button>
-                            <button
-                              onClick={() => handleDelete(s.filename)}
-                              className="hidden rounded p-0.5 text-neutral-700 hover:text-red-400 group-hover:flex"
-                            >
-                              <Trash2Icon size={11} />
-                            </button>
+                            {/* Action buttons — visible on hover */}
+                            <div className="hidden items-center gap-0.5 group-hover:flex">
+                              <Tooltip title={pins.includes(s.filename) ? 'Unpin from sidebar' : 'Pin to sidebar'} placement="top">
+                                <button
+                                  onClick={() => togglePin(s.filename)}
+                                  className={clsx(
+                                    'rounded p-0.5',
+                                    pins.includes(s.filename)
+                                      ? 'text-blue-400 hover:text-blue-300'
+                                      : 'text-neutral-600 hover:text-neutral-300'
+                                  )}
+                                >
+                                  {pins.includes(s.filename) ? <PinOffIcon size={11} /> : <PinIcon size={11} />}
+                                </button>
+                              </Tooltip>
+                              <button
+                                onClick={() => handleDelete(s.filename)}
+                                className="rounded p-0.5 text-neutral-700 hover:text-red-400"
+                              >
+                                <Trash2Icon size={11} />
+                              </button>
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -521,7 +628,7 @@ export const Script = (): ReactElement => {
               )}
             </div>
 
-            {/* Save controls */}
+            {/* Save input */}
             <div className="border-t border-neutral-800 p-2">
               <div className="mb-1 px-1 text-[10px] text-neutral-600">folder/name or just name</div>
               <div className="flex gap-1">
@@ -543,10 +650,10 @@ export const Script = (): ReactElement => {
             </div>
           </div>
 
-          {/* ── Main editor area ── */}
+          {/* ── Main editor ── */}
           <div className="flex flex-1 flex-col overflow-hidden">
 
-            {/* Run toolbar */}
+            {/* Toolbar */}
             <div className="flex items-center gap-2 border-b border-neutral-800 px-3 py-2">
               <span className={clsx('text-xs font-mono', LANG_COLOR[scriptType].split(' ')[1])}>
                 {LANG_LABEL[scriptType]}
@@ -589,14 +696,18 @@ export const Script = (): ReactElement => {
               )}
             </div>
 
-            {/* Monaco — stop propagation so keystrokes don't reach the KVM handler */}
-            <div className="flex-1 overflow-hidden" onKeyDown={(e) => e.stopPropagation()} onKeyUp={(e) => e.stopPropagation()}>
+            {/* Monaco */}
+            <div
+              className="flex-1 overflow-hidden"
+              onKeyDown={(e) => e.stopPropagation()}
+              onKeyUp={(e) => e.stopPropagation()}
+            >
               <Editor
                 height="100%"
                 language={scriptType === 'dsl' ? 'kvmscript' : MONACO_LANG[scriptType]}
                 theme="kvm-dark"
                 value={source}
-                onChange={(val) => setSource(val ?? '')}
+                onChange={handleEditorChange}
                 options={{
                   fontSize: 13,
                   fontFamily: "'Cascadia Code', 'Fira Code', 'JetBrains Mono', Consolas, monospace",

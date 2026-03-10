@@ -24,14 +24,12 @@ export const Appearance = (): ReactElement => {
 
   function changeLanguage(value: string): void {
     if (i18n.language === value) return
-
     i18n.changeLanguage(value)
     setLanguage(value)
   }
 
   function toggleMenu(): void {
     const isOpen = !isMenuOpen
-
     setIsMenuOpen(isOpen)
     storage.setIsMenuOpen(isOpen)
   }

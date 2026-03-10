@@ -53,6 +53,7 @@ app.whenReady().then(() => {
   })
 
   events.registerApp()
+  events.registerFiles()
   events.registerSerialPort()
 
   createWindow()

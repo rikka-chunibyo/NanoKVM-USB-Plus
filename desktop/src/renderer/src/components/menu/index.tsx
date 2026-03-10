@@ -6,14 +6,15 @@ import Draggable from 'react-draggable'
 
 import * as storage from '@renderer/libs/storage'
 
-import { Audio } from './audio'
-import { Keyboard } from './keyboard'
-import { Mouse } from './mouse'
-import { Recorder } from './recorder'
-import { Script } from '@renderer/components/script'
-import { SerialPort } from './serial-port'
-import { Settings } from './settings'
-import { Video } from './video'
+import { Audio }       from './audio'
+import { Keyboard }    from './keyboard'
+import { Mouse }       from './mouse'
+import { Recorder }    from './recorder'
+import { Screenshot }  from './screenshot'
+import { Script }      from '@renderer/components/script'
+import { SerialPort }  from './serial-port'
+import { Settings }    from './settings'
+import { Video }       from './video'
 
 export const Menu = (): ReactElement => {
   const [isMenuOpen, setIsMenuOpen] = useState(true)
@@ -69,8 +70,9 @@ export const Menu = (): ReactElement => {
 
             <Keyboard />
             <Mouse />
+            <Screenshot />
             <Recorder />
-            <Script />                  {/* ← new */}
+            <Script />
 
             <Divider type="vertical" className="px-0.5" />
 

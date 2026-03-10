@@ -4,6 +4,7 @@ import clsx from 'clsx'
 import {
   BadgeInfoIcon,
   CircleArrowUpIcon,
+  FolderIcon,
   PaletteIcon,
   RotateCcwIcon,
   SettingsIcon
@@ -13,39 +14,37 @@ import { useTranslation } from 'react-i18next'
 import { IpcEvents } from '@common/ipc-events'
 import * as storage from '@renderer/libs/storage'
 
-import { About } from './about'
+import { About }      from './about'
 import { Appearance } from './appearance'
-import { Reset } from './reset'
-import { Update } from './update'
+import { Files }      from './files'
+import { Reset }      from './reset'
+import { Update }     from './update'
 
 export const Settings = (): ReactElement => {
   const { t } = useTranslation()
 
-  const [isModalOpen, setIsModalOpen] = useState(false)
-  const [currentTab, setCurrentTab] = useState('appearance')
+  const [isModalOpen, setIsModalOpen]         = useState(false)
+  const [currentTab, setCurrentTab]           = useState('appearance')
   const [isUpdateAvailable, setIsUpdateAvailable] = useState(false)
 
   useEffect(() => {
     const skip = storage.getSkipUpdate()
     if (skip) return
-
     window.electron.ipcRenderer.invoke(IpcEvents.CHECK_FOR_UPDATES).then((info) => {
-      if (info?.version) {
-        setIsUpdateAvailable(true)
-      }
+      if (info?.version) setIsUpdateAvailable(true)
     })
   }, [])
 
   const tabs = [
-    { id: 'appearance', icon: <PaletteIcon size={16} />, component: <Appearance /> },
-    { id: 'update', icon: <CircleArrowUpIcon size={16} />, component: <Update /> },
-    { id: 'reset', icon: <RotateCcwIcon size={16} />, component: <Reset /> },
-    { id: 'about', icon: <BadgeInfoIcon size={16} />, component: <About /> }
+    { id: 'appearance', icon: <PaletteIcon size={16} />,      label: t('settings.appearance.title'), component: <Appearance /> },
+    { id: 'files',      icon: <FolderIcon size={16} />,       label: 'Save Locations',                component: <Files /> },
+    { id: 'update',     icon: <CircleArrowUpIcon size={16} />, label: t('settings.update.title'),     component: <Update /> },
+    { id: 'reset',      icon: <RotateCcwIcon size={16} />,    label: t('settings.reset.title'),       component: <Reset /> },
+    { id: 'about',      icon: <BadgeInfoIcon size={16} />,    label: t('settings.about.title'),       component: <About /> },
   ]
 
   function changeTab(tab: string): void {
     setCurrentTab(tab)
-
     if (isUpdateAvailable && tab === 'update') {
       setIsUpdateAvailable(false)
       storage.setSkipUpdate(true)
@@ -75,6 +74,7 @@ export const Settings = (): ReactElement => {
         destroyOnHidden
       >
         <div className="flex min-h-[500px] rounded-lg outline-1 outline-neutral-700">
+          {/* Sidebar nav */}
           <div className="flex flex-col space-y-1 rounded-l-lg bg-neutral-800 px-2 py-5 sm:w-1/5 md:w-1/4">
             <div className="hidden px-3 text-lg font-bold sm:block">{t('settings.title')}</div>
             <div className="pt-3" />
@@ -92,19 +92,16 @@ export const Settings = (): ReactElement => {
 
                 {isUpdateAvailable && tab.id === 'update' ? (
                   <Badge dot color="blue" offset={[6, 3]}>
-                    <span className="hidden truncate text-sm sm:block">
-                      {t(`settings.${tab.id}.title`)}
-                    </span>
+                    <span className="hidden truncate text-sm sm:block">{tab.label}</span>
                   </Badge>
                 ) : (
-                  <span className="hidden truncate text-sm sm:block">
-                    {t(`settings.${tab.id}.title`)}
-                  </span>
+                  <span className="hidden truncate text-sm sm:block">{tab.label}</span>
                 )}
               </div>
             ))}
           </div>
 
+          {/* Content */}
           <div className="flex max-h-[700px] w-full flex-col items-center overflow-y-auto rounded-r-lg bg-neutral-900 px-3 sm:w-4/5 md:w-3/4">
             <div className="w-full max-w-[500px] py-10">
               <>{tabs.find((tab) => tab.id === currentTab)?.component}</>

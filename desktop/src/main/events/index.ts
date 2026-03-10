@@ -1,4 +1,5 @@
 export * from './app'
+export * from './files'
 export * from './serial-port'
 export * from './updater'
 export * from './scripting'

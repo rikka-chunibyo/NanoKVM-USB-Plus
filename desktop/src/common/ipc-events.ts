@@ -25,9 +25,18 @@ export const IpcEvents = {
   DOWNLOAD_PROGRESS: 'download-progress',
   UPDATE_DOWNLOADED: 'update-downloaded',
 
+  // File saving
+  GET_DOWNLOADS_DIR:        'get-downloads-dir',
+  OPEN_DIR_PICKER:          'open-dir-picker',
+  SAVE_SCREENSHOT:          'save-screenshot',
+  OPEN_SAVE_DIALOG:         'open-save-dialog',
+  OPEN_VIDEO_WRITE_STREAM:  'open-video-write-stream',
+  WRITE_VIDEO_CHUNK:        'write-video-chunk',
+  CLOSE_VIDEO_WRITE_STREAM: 'close-video-write-stream',
+
   // Screenshot — main asks renderer to capture a video frame
-  SCRIPT_SCREENSHOT_REQUEST:  'script-screenshot-request',   // main → renderer
-  SCRIPT_SCREENSHOT_RESPONSE: 'script-screenshot-response',  // renderer → main
+  SCRIPT_SCREENSHOT_REQUEST:  'script-screenshot-request',
+  SCRIPT_SCREENSHOT_RESPONSE: 'script-screenshot-response',
 
   // Scripting — invoke (renderer → main)
   SCRIPT_RUN:         'script-run',

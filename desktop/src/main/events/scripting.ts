@@ -6,8 +6,8 @@ import { app } from 'electron'
 import { IpcEvents } from '../../common/ipc-events'
 import { device } from '../device'
 import {
-  ScriptEngine, ScriptType, detectScriptType,
-  validateDsl, ScriptParseError,
+  ScriptEngine, ScriptType,
+  validateDsl,
 } from '../scripting/engine'
 import { validateJavaScript } from '../scripting/js-runner'
 import { validatePython } from '../scripting/python-runner'
@@ -28,19 +28,42 @@ function scriptsDir(): string {
 }
 
 const EXT: Record<ScriptType, string> = { dsl: '.kvmscript', js: '.js', python: '.py' }
+const EXT_TO_TYPE: Record<string, ScriptType> = { '.kvmscript': 'dsl', '.js': 'js', '.py': 'python' }
 
-function scriptPath(name: string, type: ScriptType): string {
-  const safe = name.replace(/[^a-zA-Z0-9_\- ]/g, '_').trim()
-  return path.join(scriptsDir(), `${safe}${EXT[type]}`)
+/** Sanitise a single path segment (no slashes). */
+function safeSeg(s: string): string {
+  return s.replace(/[^a-zA-Z0-9_\- ]/g, '_').trim()
 }
 
-function findScript(name: string): { fullPath: string; type: ScriptType } | null {
-  const safe = name.replace(/[^a-zA-Z0-9_\- ]/g, '_').trim()
-  for (const [type, ext] of Object.entries(EXT) as [ScriptType, string][]) {
-    const p = path.join(scriptsDir(), `${safe}${ext}`)
-    if (fs.existsSync(p)) return { fullPath: p, type }
-  }
-  return null
+/**
+ * Parse "folder/name" or just "name" from a user-supplied save name.
+ * Returns { folder, base } where folder may be ''.
+ */
+function parseSaveName(name: string): { folder: string; base: string } {
+  const slash = name.indexOf('/')
+  if (slash === -1) return { folder: '', base: safeSeg(name) }
+  return { folder: safeSeg(name.slice(0, slash)), base: safeSeg(name.slice(slash + 1)) }
+}
+
+/** Build a full path from display name + type, creating subdirs as needed. */
+function scriptPath(name: string, type: ScriptType): string {
+  const { folder, base } = parseSaveName(name)
+  const dir = folder ? path.join(scriptsDir(), folder) : scriptsDir()
+  fs.mkdirSync(dir, { recursive: true })
+  return path.join(dir, `${base}${EXT[type]}`)
+}
+
+/**
+ * Resolve a filename that may include a folder prefix (e.g. "work/test.js")
+ * to its absolute path + type.
+ */
+function resolveFilename(filename: string): { fullPath: string; type: ScriptType } | null {
+  const ext = path.extname(filename)
+  const type = EXT_TO_TYPE[ext]
+  if (!type) return null
+  const fullPath = path.join(scriptsDir(), filename)
+  if (!fs.existsSync(fullPath)) return null
+  return { fullPath, type }
 }
 
 // ---------------------------------------------------------------------------
@@ -68,7 +91,7 @@ export function registerScripting(win: BrowserWindow): void {
 
   // Validation
   ipcMain.handle(IpcEvents.SCRIPT_VALIDATE, (_: IpcMainInvokeEvent, source: string, forceType?: ScriptType) => {
-    const type = forceType ?? detectScriptType(source)
+    const type = forceType ?? 'dsl'
     if (type === 'js')     return validateJavaScript(source)
     if (type === 'python') return validatePython(source)
     return validateDsl(source)
@@ -77,38 +100,57 @@ export function registerScripting(win: BrowserWindow): void {
   // Storage
   ipcMain.handle(IpcEvents.SCRIPT_SAVE, (_: IpcMainInvokeEvent, name: string, source: string, type?: ScriptType) => {
     try {
-      const resolved = type ?? detectScriptType(source)
+      const resolved = type ?? 'dsl'
       fs.writeFileSync(scriptPath(name, resolved), source, 'utf-8')
       return { ok: true }
     } catch (err) { return { ok: false, error: String(err) } }
   })
 
-  ipcMain.handle(IpcEvents.SCRIPT_LOAD, (_: IpcMainInvokeEvent, name: string) => {
+  ipcMain.handle(IpcEvents.SCRIPT_LOAD, (_: IpcMainInvokeEvent, filename: string) => {
     try {
-      const found = findScript(name)
-      if (!found) return { ok: false, error: `Script "${name}" not found` }
+      const found = resolveFilename(filename)
+      if (!found) return { ok: false, error: `Script "${filename}" not found` }
       return { ok: true, source: fs.readFileSync(found.fullPath, 'utf-8'), type: found.type }
     } catch (err) { return { ok: false, error: String(err) } }
   })
 
-  ipcMain.handle(IpcEvents.SCRIPT_DELETE, (_: IpcMainInvokeEvent, name: string) => {
+  ipcMain.handle(IpcEvents.SCRIPT_DELETE, (_: IpcMainInvokeEvent, filename: string) => {
     try {
-      const found = findScript(name)
-      if (!found) return { ok: false, error: `Script "${name}" not found` }
+      const found = resolveFilename(filename)
+      if (!found) return { ok: false, error: `Script "${filename}" not found` }
       fs.unlinkSync(found.fullPath)
       return { ok: true }
     } catch (err) { return { ok: false, error: String(err) } }
   })
 
-  ipcMain.handle(IpcEvents.SCRIPT_LIST, (): Array<{ name: string; type: ScriptType }> => {
+  ipcMain.handle(IpcEvents.SCRIPT_LIST, (): Array<{ filename: string; displayName: string; type: ScriptType; folder: string }> => {
     try {
-      return fs.readdirSync(scriptsDir())
-        .filter((f) => f.endsWith('.kvmscript') || f.endsWith('.js') || f.endsWith('.py'))
-        .map((f) => {
-          const type: ScriptType = f.endsWith('.js') ? 'js' : f.endsWith('.py') ? 'python' : 'dsl'
-          return { name: f.replace(/\.(kvmscript|js|py)$/, ''), type }
-        })
-        .sort((a, b) => a.name.localeCompare(b.name))
+      const results: Array<{ filename: string; displayName: string; type: ScriptType; folder: string }> = []
+      const root = scriptsDir()
+
+      function walk(dir: string, folder: string): void {
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+          if (entry.isDirectory()) {
+            walk(path.join(dir, entry.name), folder ? `${folder}/${entry.name}` : entry.name)
+          } else {
+            const ext = path.extname(entry.name)
+            const type = EXT_TO_TYPE[ext]
+            if (!type) continue
+            const relativePath = folder ? `${folder}/${entry.name}` : entry.name
+            results.push({
+              filename: relativePath,
+              displayName: entry.name.slice(0, -ext.length),
+              type,
+              folder,
+            })
+          }
+        }
+      }
+
+      walk(root, '')
+      return results.sort((a, b) =>
+        a.folder.localeCompare(b.folder) || a.displayName.localeCompare(b.displayName)
+      )
     } catch { return [] }
   })
 

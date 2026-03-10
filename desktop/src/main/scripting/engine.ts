@@ -1,11 +1,11 @@
 /**
  * engine.ts
  *
- * Detects script type from source/extension and dispatches to the right runner.
+
  *
- *   DSL    — default; plain .kvmscript files
- *   JS     — first line is `#!js`, or .js extension
- *   Python — first line is `#!python` or `#!py`, or .py extension
+
+
+
  */
 
 import { EventEmitter } from 'events'
@@ -22,12 +22,6 @@ export { validateJavaScript, validatePython, JsRunnerError, PythonRunnerError }
 
 export type ScriptType = 'dsl' | 'js' | 'python'
 
-export function detectScriptType(source: string): ScriptType {
-  const first = source.trimStart().split('\n')[0].trim()
-  if (first === '#!js') return 'js'
-  if (first === '#!python' || first === '#!py') return 'python'
-  return 'dsl'
-}
 
 // ---------------------------------------------------------------------------
 // Shared types
@@ -66,12 +60,12 @@ export type Instruction =
 // ---------------------------------------------------------------------------
 
 export class ScriptParseError extends Error {
-  constructor(
-    public readonly lineNumber: number,
-    public readonly lineText: string,
-    message: string
-  ) {
+  readonly lineNumber: number
+  readonly lineText: string
+  constructor(lineNumber: number, lineText: string, message: string) {
     super(`Line ${lineNumber}: ${message} → "${lineText}"`)
+    this.lineNumber = lineNumber
+    this.lineText = lineText
     this.name = 'ScriptParseError'
   }
 }
@@ -171,8 +165,8 @@ function parseInstructions(lines: string[], startLine = 0): { instructions: Inst
 
 export function parseScript(source: string): Instruction[] {
   const lines = source.split('\n')
-  const skip = /^#!/.test(lines[0]?.trim() ?? '') ? 1 : 0
-  return parseInstructions(lines.slice(skip)).instructions
+  
+  return parseInstructions(lines).instructions
 }
 
 export function validateDsl(source: string): { ok: boolean; error?: string } {
@@ -240,7 +234,7 @@ export class ScriptEngine extends EventEmitter {
     this._status = 'running'
     this._abort = new AbortController()
     const { signal } = this._abort
-    const type = forceType ?? detectScriptType(source)
+    const type = forceType ?? 'dsl'
 
     const kvm = createKvmApi(this.device, (m) => this.emit('log', m), this.screenshotFn)
     kvm.typeDelay     = this.typeDelay

@@ -15,12 +15,73 @@
     "dev": "electron-vite dev",
     "build": "npm run typecheck && electron-vite build",
     "build:unpack": "npm run build && electron-builder --dir",
-    "build:win": "npm run build && electron-builder --win",
-    "build:mac": "electron-vite build && electron-builder --mac",
-    "build:linux": "electron-vite build && electron-builder --linux",
-    "build:win-full": "npm run build && electron-builder --win --x64 --arm64",
-    "build:mac-full": "electron-vite build && electron-builder --mac --x64 --arm64",
-    "build:linux-full": "electron-vite build && electron-builder --linux --x64 --arm64"
+    "build:win": "npm run build && electron-builder --win nsis --x64",
+    "build:mac": "electron-vite build && electron-builder --mac dmg --x64",
+    "build:linux": "electron-vite build && electron-builder --linux AppImage --x64",
+    "build:win-full": "npm run build && electron-builder --win nsis --x64 --arm64",
+    "build:mac-full": "electron-vite build && electron-builder --mac dmg --x64 --arm64",
+    "build:linux-full": "electron-vite build && electron-builder --linux AppImage --x64 --arm64"
+  },
+  "build": {
+    "appId": "com.sipeed.nanokvm-usb",
+    "productName": "NanoKVM-USB",
+    "asar": true,
+    "asarUnpack": [
+      "**/node_modules/serialport/**",
+      "**/node_modules/@serialport/**",
+      "**/node_modules/bindings/**",
+      "**/node_modules/node-gyp-build/**"
+    ],
+    "files": [
+      "out/**/*",
+      "!out/**/*.map"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "resources/icon.ico"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "resources/icon.icns",
+      "category": "public.app-category.utilities"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "resources/icon.png",
+      "category": "Utility"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "NanoKVM-USB",
+      "artifactName": "${productName}-${version}-setup.exe"
+    },
+    "buildDependenciesFromSource": false,
+    "npmRebuild": false
   },
   "dependencies": {
     "@ant-design/icons": "^5.6.1",
@@ -98,5 +159,8 @@
       "lodash@<4.17.23": ">=4.17.23",
       "@isaacs/brace-expansion@<=5.0.0": ">=5.0.1"
     }
+  },
+  "electronRebuildConfig": {
+    "buildFromSource": false
   }
 }

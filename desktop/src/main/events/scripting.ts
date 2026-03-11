@@ -53,8 +53,8 @@ function scriptsDir(): string {
   return dir
 }
 
-const EXT: Record<ScriptType, string> = { dsl: '.kvmscript', js: '.js', python: '.py' }
-const EXT_TO_TYPE: Record<string, ScriptType> = { '.kvmscript': 'dsl', '.js': 'js', '.py': 'python' }
+const EXT: Record<ScriptType, string> = { dsl: '.kvm', js: '.js', python: '.py' }
+const EXT_TO_TYPE: Record<string, ScriptType> = { '.kvm': 'dsl', '.js': 'js', '.py': 'python' }
 
 /** Sanitise a single path segment (no slashes). */
 function safeSeg(s: string): string {

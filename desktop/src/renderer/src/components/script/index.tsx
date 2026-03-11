@@ -2,7 +2,7 @@
  * components/script/index.tsx
  */
 
-import { ReactElement, useEffect, useRef, useState, useCallback } from 'react'
+import { ReactElement, useEffect, useRef, useState } from 'react'
 import { Modal, Tooltip } from 'antd'
 import clsx from 'clsx'
 import {
@@ -28,13 +28,13 @@ type SavedScript  = { filename: string; displayName: string; type: ScriptType; f
 type LogEntry     = { id: number; text: string; kind: 'log' | 'error' | 'info' }
 type PendingLoad  = { source: string; type: ScriptType } | null
 
-const LANG_LABEL:  Record<ScriptType, string> = { dsl: 'DSL', js: 'JavaScript', python: 'Python' }
+const LANG_LABEL:  Record<ScriptType, string> = { dsl: 'KVM', js: 'JavaScript', python: 'Python' }
 const MONACO_LANG: Record<ScriptType, string> = { dsl: 'plaintext', js: 'javascript', python: 'python' }
 
 const LANG_COLOR: Record<ScriptType, string> = {
-  dsl:    'bg-sky-500/20 text-sky-300 border-sky-500/30',
+  dsl:    'bg-violet-500/20 text-violet-300 border-violet-500/30',
   js:     'bg-yellow-500/20 text-yellow-300 border-yellow-500/30',
-  python: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+  python: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
 }
 
 const STATUS_COLOR: Record<ScriptStatus, string> = {
@@ -240,6 +240,57 @@ function ConfirmLoadModal({
 }
 
 // ---------------------------------------------------------------------------
+// Confirm-delete modal
+// ---------------------------------------------------------------------------
+
+function ConfirmDeleteModal({
+  open,
+  what,
+  onConfirm,
+  onCancel,
+}: {
+  open: boolean
+  what: string
+  onConfirm: () => void
+  onCancel: () => void
+}): ReactElement {
+  return (
+    <Modal
+      open={open}
+      footer={null}
+      onCancel={onCancel}
+      width={380}
+      closable={false}
+      styles={{ content: { background: '#1a1a1a' }, mask: { background: 'rgba(0,0,0,0.7)' } }}
+    >
+      <div className="flex flex-col gap-4 p-2">
+        <div className="flex items-center gap-2 text-red-400">
+          <Trash2Icon size={18} />
+          <span className="font-medium">Delete script</span>
+        </div>
+        <p className="text-sm text-neutral-300">
+          Are you sure you want to delete <span className="text-white font-medium">"{what}"</span>? This cannot be undone.
+        </p>
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={onCancel}
+            className="rounded border border-neutral-700 px-3 py-1.5 text-sm text-neutral-300 hover:bg-neutral-800"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className="rounded bg-red-600 px-3 py-1.5 text-sm text-white hover:bg-red-500"
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
@@ -266,14 +317,18 @@ export const Script = (): ReactElement => {
   const [pendingLoad, setPendingLoad] = useState<PendingLoad>(null)
   const [confirmWhat, setConfirmWhat] = useState('')
 
+  // Confirm-delete state
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null)
+  const [deleteWhat, setDeleteWhat]       = useState('')
+
   const consoleRef = useRef<HTMLDivElement>(null)
 
   // Register DSL syntax + theme
   useEffect(() => {
     if (!monacoInstance) return
-    if (monacoInstance.languages.getLanguages().some((l) => l.id === 'kvmscript')) return
-    monacoInstance.languages.register({ id: 'kvmscript' })
-    monacoInstance.languages.setMonarchTokensProvider('kvmscript', {
+    if (monacoInstance.languages.getLanguages().some((l) => l.id === 'kvm')) return
+    monacoInstance.languages.register({ id: 'kvm' })
+    monacoInstance.languages.setMonarchTokensProvider('kvm', {
       keywords: ['type', 'key', 'delay', 'mouse', 'repeat', 'end', 'log', 'screenshot'],
       tokenizer: {
         root: [
@@ -408,17 +463,28 @@ export const Script = (): ReactElement => {
     }
   }
 
-  async function handleDelete(filename: string): Promise<void> {
-    await window.electron.ipcRenderer.invoke(IpcEvents.SCRIPT_DELETE, filename)
+  function handleDelete(filename: string, displayName: string): void {
+    setPendingDelete(filename)
+    setDeleteWhat(displayName)
+  }
+
+  async function confirmDelete(): Promise<void> {
+    if (!pendingDelete) return
+    await window.electron.ipcRenderer.invoke(IpcEvents.SCRIPT_DELETE, pendingDelete)
     // Always clean up pins — even if we don't think it's pinned, clear any
     // stale reference so the sidebar and storage stay consistent.
-    const next = pins.filter(f => f !== filename)
+    const next = pins.filter(f => f !== pendingDelete)
     if (next.length !== pins.length) {
       setSidebarPins(next)
       setPins(next)
       window.dispatchEvent(new CustomEvent(KVM_PINS_CHANGED))
     }
+    setPendingDelete(null)
     loadSavedList()
+  }
+
+  function cancelDelete(): void {
+    setPendingDelete(null)
   }
 
   function handleOpen(): void {
@@ -467,6 +533,14 @@ export const Script = (): ReactElement => {
         what={confirmWhat}
         onConfirm={confirmLoad}
         onCancel={cancelLoad}
+      />
+
+      {/* Confirm delete dialog */}
+      <ConfirmDeleteModal
+        open={pendingDelete !== null}
+        what={deleteWhat}
+        onConfirm={confirmDelete}
+        onCancel={cancelDelete}
       />
 
       <Modal
@@ -586,7 +660,7 @@ export const Script = (): ReactElement => {
                               )}
                             >
                               <span className={clsx('shrink-0 rounded border px-1 text-[9px] font-mono', LANG_COLOR[s.type])}>
-                                {s.type === 'dsl' ? 'D' : s.type === 'js' ? 'J' : 'P'}
+                                {s.type === 'dsl' ? 'K' : s.type === 'js' ? 'J' : 'P'}
                               </span>
                               <span className="truncate text-neutral-300">{s.displayName}</span>
                             </button>
@@ -606,7 +680,7 @@ export const Script = (): ReactElement => {
                                 </button>
                               </Tooltip>
                               <button
-                                onClick={() => handleDelete(s.filename)}
+                                onClick={() => handleDelete(s.filename, s.displayName)}
                                 className="rounded p-0.5 text-neutral-700 hover:text-red-400"
                               >
                                 <Trash2Icon size={11} />
@@ -697,7 +771,7 @@ export const Script = (): ReactElement => {
             >
               <Editor
                 height="100%"
-                language={scriptType === 'dsl' ? 'kvmscript' : MONACO_LANG[scriptType]}
+                language={scriptType === 'dsl' ? 'kvm' : MONACO_LANG[scriptType]}
                 theme="kvm-dark"
                 value={source}
                 onChange={handleEditorChange}

@@ -51,7 +51,7 @@ export async function runJavaScript(
 
   let script: vm.Script
   try {
-    script = new vm.Script(`(async function __kvmScript__() {\n${source}\n})()`, {
+    script = new vm.Script(`(async function __kvm__() {\n${source}\n})()`, {
       filename: 'kvm-script.js'
     })
   } catch (err) {

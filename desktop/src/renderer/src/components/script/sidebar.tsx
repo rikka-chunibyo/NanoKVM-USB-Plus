@@ -24,9 +24,9 @@ type Pos         = { x: number; y: number }
 const SIDEBAR_POS_KEY = 'nanokvm-script-sidebar-xy'
 
 const LANG_COLOR: Record<ScriptType, string> = {
-  dsl:    'bg-sky-500/20 text-sky-300 border-sky-500/30',
+  dsl:    'bg-violet-500/20 text-violet-300 border-violet-500/30',
   js:     'bg-yellow-500/20 text-yellow-300 border-yellow-500/30',
-  python: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+  python: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
 }
 
 function loadPos(): Pos {
@@ -196,7 +196,7 @@ export const ScriptSidebar = (): ReactElement | null => {
           style={{ left: ghostPos.x, top: ghostPos.y }}
         >
           <span className={clsx('rounded border px-1 py-0.5 text-[9px] font-mono', LANG_COLOR[ghostScript.type])}>
-            {ghostScript.type === 'dsl' ? 'D' : ghostScript.type === 'js' ? 'J' : 'P'}
+            {ghostScript.type === 'dsl' ? 'K' : ghostScript.type === 'js' ? 'J' : 'P'}
           </span>
           <span className="max-w-[100px] truncate text-xs text-neutral-200">{ghostScript.displayName}</span>
         </div>
@@ -250,7 +250,7 @@ export const ScriptSidebar = (): ReactElement | null => {
                     </div>
 
                     <span className={clsx('shrink-0 rounded border px-1 py-0.5 text-[9px] font-mono', LANG_COLOR[s.type])}>
-                      {s.type === 'dsl' ? 'D' : s.type === 'js' ? 'J' : 'P'}
+                      {s.type === 'dsl' ? 'K' : s.type === 'js' ? 'J' : 'P'}
                     </span>
 
                     <span

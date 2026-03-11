@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Button, Modal } from 'antd'
+import { Button, Modal, Tooltip } from 'antd'
 import { useSetAtom } from 'jotai'
 import { VolumeOffIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -51,12 +51,14 @@ export const Audio = () => {
 
   return (
     <>
-      <div
-        className="flex h-[28px] w-[28px] cursor-pointer items-center justify-center rounded text-neutral-300 hover:bg-neutral-700/70 hover:text-white"
-        onClick={requestPermission}
-      >
-        <VolumeOffIcon size={18} />
-      </div>
+      <Tooltip title="Enable audio" placement="bottom">
+        <div
+          className="flex h-[28px] w-[28px] cursor-pointer items-center justify-center rounded text-neutral-300 hover:bg-neutral-700/70 hover:text-white"
+          onClick={requestPermission}
+        >
+          <VolumeOffIcon size={18} />
+        </div>
+      </Tooltip>
 
       <Modal open={isModalOpen} title={t('audio.tip')} footer={null} onCancel={closeModal}>
         <div className="py-5 whitespace-pre-line">{t('audio.permission')}</div>

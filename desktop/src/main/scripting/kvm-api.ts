@@ -1,3 +1,4 @@
+import { clipboard } from 'electron'
 import { Device } from '../device'
 import { buildKeyboardReport, charToKeyCombo, KEY_UP_REPORT, parseKeyCombo } from './keycodes'
 
@@ -14,6 +15,7 @@ export interface KvmApi {
   mouseScroll(delta: number): Promise<void>
   delay(ms: number): Promise<void>
   screenshot(): Promise<ScreenshotResult>
+  clipboard(): Promise<string>
   log(message: string): void
   typeDelay: number
   keyPressDelay: number
@@ -79,6 +81,8 @@ export function createKvmApi(device: Device, logFn: LogFn, screenshotFn: Screens
     async delay(ms) { await sleep(ms) },
 
     async screenshot() { return screenshotFn() },
+
+    async clipboard() { return clipboard.readText() },
 
     log(message) { logFn(message) },
   }

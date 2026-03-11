@@ -13,6 +13,7 @@ import {
 import Editor, { loader, useMonaco } from '@monaco-editor/react'
 import * as monaco from 'monaco-editor'
 import { IpcEvents } from '@common/ipc-events'
+import { KVM_PINS_CHANGED } from '@common/ipc-events'
 import { getSidebarPins, setSidebarPins } from '@renderer/libs/storage'
 
 loader.config({ monaco })
@@ -175,23 +176,8 @@ else:
     {
       label: 'Type clipboard contents',
       source: `import kvm
-import subprocess
-import sys
 
-def get_clipboard():
-    if sys.platform == 'win32':
-        import ctypes
-        ctypes.windll.user32.OpenClipboard(0)
-        handle = ctypes.windll.user32.GetClipboardData(1)
-        text = ctypes.cast(handle, ctypes.c_char_p).value.decode('utf-8', errors='replace')
-        ctypes.windll.user32.CloseClipboard()
-        return text
-    elif sys.platform == 'darwin':
-        return subprocess.check_output(['pbpaste']).decode('utf-8')
-    else:
-        return subprocess.check_output(['xclip', '-selection', 'clipboard', '-o']).decode('utf-8')
-
-text = get_clipboard()
+text = kvm.clipboard()
 kvm.log(f'Typing {len(text)} chars from clipboard')
 kvm.type(text)
 kvm.log('Done')
@@ -383,6 +369,7 @@ export const Script = (): ReactElement => {
         ? prev.filter(f => f !== filename)
         : [...prev, filename]
       setSidebarPins(next)
+      window.dispatchEvent(new CustomEvent(KVM_PINS_CHANGED))
       return next
     })
   }
@@ -423,8 +410,14 @@ export const Script = (): ReactElement => {
 
   async function handleDelete(filename: string): Promise<void> {
     await window.electron.ipcRenderer.invoke(IpcEvents.SCRIPT_DELETE, filename)
-    // Remove from pins too
-    if (pins.includes(filename)) togglePin(filename)
+    // Always clean up pins — even if we don't think it's pinned, clear any
+    // stale reference so the sidebar and storage stay consistent.
+    const next = pins.filter(f => f !== filename)
+    if (next.length !== pins.length) {
+      setSidebarPins(next)
+      setPins(next)
+      window.dispatchEvent(new CustomEvent(KVM_PINS_CHANGED))
+    }
     loadSavedList()
   }
 

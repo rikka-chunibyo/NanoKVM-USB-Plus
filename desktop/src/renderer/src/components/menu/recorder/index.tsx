@@ -1,10 +1,3 @@
-/**
- * components/recorder/index.tsx
- *
- * Normal click  → saves directly to configured video directory (auto-named).
- * Shift + click → shows Electron save dialog to choose exact file path.
- */
-
 import { useEffect, useRef, useState } from 'react'
 import { Tooltip } from 'antd'
 import { Video } from 'lucide-react'
@@ -112,8 +105,8 @@ export const Recorder = () => {
 
   const tooltipTitle = (
     <span>
-      Record
-      <span className="ml-1.5 text-neutral-400 text-xs">(Shift+click to choose location)</span>
+      Record&nbsp;
+      <span className="text-neutral-400 text-xs">Shift+click to choose location</span>
     </span>
   )
 
@@ -130,7 +123,7 @@ export const Recorder = () => {
   }
 
   return (
-    <Tooltip title={tooltipTitle} placement="bottom">
+    <Tooltip title={tooltipTitle} placement="bottom" overlayStyle={{ maxWidth: 260 }}>
       <div
         className="flex h-[28px] cursor-pointer items-center justify-center rounded px-2 text-white hover:bg-neutral-700/70"
         onClick={handleStartRecording}

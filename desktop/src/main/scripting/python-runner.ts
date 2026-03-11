@@ -76,6 +76,10 @@ def screenshot():
     result = _call('screenshot')
     return result  # already a file path string
 
+def clipboard():
+    """Returns the current clipboard text contents."""
+    return _call('clipboard')
+
 def close():
     global _sock
     if _sock:
@@ -134,6 +138,8 @@ async function dispatchCommand(cmd: KvmCommand, kvm: KvmApi): Promise<unknown> {
       const result = await kvm.screenshot()
       return result.path
     }
+    case 'clipboard':
+      return kvm.clipboard()
     default:
       throw new Error(`Unknown command: ${cmd.cmd}`)
   }

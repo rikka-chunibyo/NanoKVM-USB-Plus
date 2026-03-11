@@ -1,15 +1,3 @@
-/**
- * components/menu/screenshot/index.tsx
- *
- * Captures the live <video id="video"> element and saves as PNG.
- *
- * Normal click  → saves silently to the configured screenshots directory.
- * Shift + click → shows an Electron save dialog to choose the exact file.
- *
- * Import in menu/index.tsx:
- *   import { Screenshot } from './screenshot'
- */
-
 import { ReactElement, useState } from 'react'
 import { Tooltip } from 'antd'
 import clsx from 'clsx'
@@ -54,7 +42,6 @@ export const Screenshot = (): ReactElement => {
       const filename = `screenshot-${timestamp()}.png`
 
       if (e.shiftKey) {
-        // ── Shift: let user pick exact save path ─────────────────────────
         const downloadsDir = await window.electron.ipcRenderer.invoke(IpcEvents.GET_DOWNLOADS_DIR)
         const defaultPath = `${downloadsDir}/${filename}`
 
@@ -65,7 +52,6 @@ export const Screenshot = (): ReactElement => {
 
         if (!chosenPath) { setState('idle'); return }
 
-        // Extract dir + filename from chosen path for the SAVE_SCREENSHOT handler
         const parts = chosenPath.replace(/\\/g, '/').split('/')
         const chosenFile = parts.pop()!
         const chosenDir  = parts.join('/')
@@ -76,8 +62,7 @@ export const Screenshot = (): ReactElement => {
           filename: chosenFile,
         })
       } else {
-        // ── Normal: save to configured directory ─────────────────────────
-        const dir = getScreenshotSavePath()   // '' = main process uses Downloads
+        const dir = getScreenshotSavePath()
         await window.electron.ipcRenderer.invoke(IpcEvents.SAVE_SCREENSHOT, {
           base64,
           dir,
@@ -96,15 +81,13 @@ export const Screenshot = (): ReactElement => {
 
   const tooltipTitle = (
     <span>
-      Screenshot
-      <span className="ml-1.5 text-neutral-400 text-xs">
-        (Shift+click to choose location)
-      </span>
+      Screenshot&nbsp;
+      <span className="text-neutral-400 text-xs">Shift+click to choose location</span>
     </span>
   )
 
   return (
-    <Tooltip title={tooltipTitle} placement="bottom">
+    <Tooltip title={tooltipTitle} placement="bottom" overlayStyle={{ maxWidth: 260 }}>
       <div
         className={clsx(
           'flex h-[28px] cursor-pointer items-center justify-center rounded px-2 hover:bg-neutral-700/70',

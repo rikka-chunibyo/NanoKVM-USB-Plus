@@ -1,5 +1,5 @@
 import { ReactElement, useEffect, useState } from 'react'
-import { Badge, Modal } from 'antd'
+import { Badge, Modal, Tooltip } from 'antd'
 import clsx from 'clsx'
 import {
   BadgeInfoIcon,
@@ -58,12 +58,14 @@ export const Settings = (): ReactElement => {
 
   return (
     <>
-      <div
-        className="flex h-[28px] cursor-pointer items-center justify-center rounded px-2 text-white hover:bg-neutral-700/70"
-        onClick={() => setIsModalOpen(true)}
-      >
-        <SettingsIcon size={18} />
-      </div>
+      <Tooltip title={t('settings.title')} placement="bottom" open={isModalOpen ? false : undefined}>
+        <div
+          className="flex h-[28px] cursor-pointer items-center justify-center rounded px-2 text-white hover:bg-neutral-700/70"
+          onClick={() => setIsModalOpen(true)}
+        >
+          <SettingsIcon size={18} />
+        </div>
+      </Tooltip>
 
       <Modal
         open={isModalOpen}

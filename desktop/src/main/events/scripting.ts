@@ -21,8 +21,34 @@ const engine = new ScriptEngine(device, captureScreen)
 // ---------------------------------------------------------------------------
 // Storage helpers
 // ---------------------------------------------------------------------------
+
+/** Configurable save directory; null = fall back to userData/scripts */
+let configuredScriptsDir: string | null = null
+
+/** Path to the small JSON file that persists the configured scripts dir. */
+function scriptConfigPath(): string {
+  return path.join(app.getPath('userData'), 'kvm-script-config.json')
+}
+
+/** Load configured dir from disk once at module initialisation time. */
+function loadScriptConfig(): void {
+  try {
+    const raw = fs.readFileSync(scriptConfigPath(), 'utf-8')
+    const parsed = JSON.parse(raw) as { saveDir?: string }
+    configuredScriptsDir = parsed.saveDir || null
+  } catch { /* file not found or invalid — use default */ }
+}
+
+function saveScriptConfig(): void {
+  try {
+    fs.writeFileSync(scriptConfigPath(), JSON.stringify({ saveDir: configuredScriptsDir }), 'utf-8')
+  } catch { /* non-fatal */ }
+}
+
+loadScriptConfig()
+
 function scriptsDir(): string {
-  const dir = path.join(app.getPath('userData'), 'scripts')
+  const dir = configuredScriptsDir || path.join(app.getPath('userData'), 'scripts')
   fs.mkdirSync(dir, { recursive: true })
   return dir
 }
@@ -154,8 +180,16 @@ export function registerScripting(win: BrowserWindow): void {
     } catch { return [] }
   })
 
-  ipcMain.handle(IpcEvents.SCRIPT_SET_OPTIONS, (_: IpcMainInvokeEvent, opts: { typeDelay?: number; keyPressDelay?: number }) => {
+  ipcMain.handle(IpcEvents.SCRIPT_SET_OPTIONS, (_: IpcMainInvokeEvent, opts: {
+    typeDelay?: number
+    keyPressDelay?: number
+    saveDir?: string
+  }) => {
     if (opts.typeDelay     !== undefined) engine.typeDelay     = opts.typeDelay
     if (opts.keyPressDelay !== undefined) engine.keyPressDelay = opts.keyPressDelay
+    if (opts.saveDir       !== undefined) {
+      configuredScriptsDir = opts.saveDir || null
+      saveScriptConfig()
+    }
   })
 }

@@ -1,5 +1,5 @@
 import { ReactElement, useEffect, useState } from 'react'
-import { Divider, Popover, Select } from 'antd'
+import { Divider, Popover, Select, Tooltip } from 'antd'
 import clsx from 'clsx'
 import { useAtom } from 'jotai'
 import { CpuIcon, LoaderCircleIcon, RadioIcon } from 'lucide-react'
@@ -30,6 +30,7 @@ export const SerialPort = (): ReactElement => {
   const [connectingPort, setConnectingPort] = useState('')
   const [serialPorts, setSerialPorts] = useState<string[]>([])
   const [isBaudRateLoading, setIsBaudRateLoading] = useState(false)
+  const [popoverOpen, setPopoverOpen] = useState(false)
 
   useEffect(() => {
     const savedBaudRate = storage.getBaudRate()
@@ -84,6 +85,10 @@ export const SerialPort = (): ReactElement => {
     }
   }
 
+  const tooltipTitle = serialPort
+    ? `Serial Port · ${serialPort} @ ${baudRate}`
+    : 'Serial Port'
+
   const content = (
     <div className="min-w-[200px] pt-2 pb-3">
       <div className="mb-1 px-3 text-sm text-neutral-500">{t('menu.serialPort.device')}</div>
@@ -131,15 +136,23 @@ export const SerialPort = (): ReactElement => {
   )
 
   return (
-    <Popover content={content} placement="bottomLeft" trigger="click" arrow={false}>
-      <div
-        className={clsx(
-          'flex h-[28px] cursor-pointer items-center justify-center rounded px-2 text-white hover:bg-neutral-700/70'
-        )}
-        title={serialPort ? `${serialPort} @ ${baudRate}` : t('menu.serialPort.clickToSelect')}
-      >
-        <CpuIcon size={18} />
-      </div>
+    <Popover
+      content={content}
+      placement="bottomLeft"
+      trigger="click"
+      arrow={false}
+      open={popoverOpen}
+      onOpenChange={setPopoverOpen}
+    >
+      <Tooltip title={tooltipTitle} placement="bottom" open={popoverOpen ? false : undefined}>
+        <div
+          className={clsx(
+            'flex h-[28px] cursor-pointer items-center justify-center rounded px-2 text-white hover:bg-neutral-700/70'
+          )}
+        >
+          <CpuIcon size={18} />
+        </div>
+      </Tooltip>
     </Popover>
   )
 }

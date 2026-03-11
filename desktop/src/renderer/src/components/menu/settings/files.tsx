@@ -78,15 +78,28 @@ const PathRow = ({ icon, label, description, value, onChange }: PathRowProps): R
   )
 }
 
+/** Push the active script directory to the main process. */
+function syncScriptDirToMain(dir: string): void {
+  window.electron.ipcRenderer.invoke(IpcEvents.SCRIPT_SET_OPTIONS, { saveDir: dir })
+}
+
 export const Files = (): ReactElement => {
   const [screenshotPath, setScreenshotPath] = useState('')
   const [videoPath, setVideoPath]           = useState('')
   const [scriptPath, setScriptPath]         = useState('')
 
   useEffect(() => {
-    setScreenshotPath(getScreenshotSavePath())
-    setVideoPath(getVideoSavePath())
-    setScriptPath(getScriptSavePath())
+    const screenshot = getScreenshotSavePath()
+    const video      = getVideoSavePath()
+    const script     = getScriptSavePath()
+
+    setScreenshotPath(screenshot)
+    setVideoPath(video)
+    setScriptPath(script)
+
+    // Sync the current script dir to the main process on mount so it takes
+    // effect immediately even if the user never opens this settings tab.
+    syncScriptDirToMain(script)
   }, [])
 
   function handleScreenshotChange(p: string): void {
@@ -100,6 +113,7 @@ export const Files = (): ReactElement => {
   function handleScriptChange(p: string): void {
     setScriptPath(p)
     setScriptSavePath(p)
+    syncScriptDirToMain(p)
   }
 
   return (

@@ -57,4 +57,11 @@ export const IpcEvents = {
   SCRIPT_LOG:      'script-log',
 } as const
 
+/**
+ * Custom window event dispatched whenever the sidebar pin list changes
+ * within the same renderer window. The native `storage` event only fires
+ * in *other* windows, so same-window changes need this instead.
+ */
+export const KVM_PINS_CHANGED = 'kvm-pins-changed'
+
 export type IpcEventName = (typeof IpcEvents)[keyof typeof IpcEvents]

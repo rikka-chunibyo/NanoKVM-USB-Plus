@@ -10,7 +10,8 @@ import { Device } from '@renderer/components/device'
 import { Keyboard } from '@renderer/components/keyboard'
 import { Menu } from '@renderer/components/menu'
 import { Mouse } from '@renderer/components/mouse'
-import { ScriptCapture } from '@renderer/components/script/capture'   // ← new
+import { ScriptCapture } from '@renderer/components/script/capture'
+import { ScriptSidebar } from '@renderer/components/script/sidebar'
 import { VirtualKeyboard } from '@renderer/components/virtual-keyboard'
 import {
   resolutionAtom,
@@ -85,7 +86,8 @@ const App = (): ReactElement => {
   return (
     <>
       <Device />
-      <ScriptCapture />   {/* invisible — handles screenshot IPC */}
+      <ScriptCapture />
+      <ScriptSidebar />
 
       {videoState === 'connected' && serialPortState === 'connected' && (
         <>

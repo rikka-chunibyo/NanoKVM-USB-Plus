@@ -1,6 +1,6 @@
-# NanoKVM-USB Browser
+# NanoKVM-USB Plus Browser
 
-This is the NanoKVM-USB browser version project.
+This is the NanoKVM-USB Plus browser version project.
 
 Online website: [usbkvm.sipeed.com](https://usbkvm.sipeed.com).
 
@@ -20,11 +20,11 @@ pnpm dev
 4. Execute `http-server -p 8080 -a localhost` to run the service.
 5. Open the Chrome browser and visit `http://localhost:8080`.
 
-### Deploy in Docker
+### Deploy in Docker (HAS NOT BEEN UPDATED FOR PLUS)
 
 ```shell
-git clone https://github.com/sipeed/NanoKVM-USB.git
-cd NanoKVM-USB
+git clone https://github.com/rikka-chunibyo/NanoKVM-USB-Plus.git
+cd NanoKVM-USB-Plus
 docker-compose up -d
 ```
 

@@ -86,7 +86,7 @@ const ru = {
         cancel: 'Отмена'
       },
       about: {
-        title: 'О системе NanoKVM-USB',
+        title: 'О системе NanoKVM-USB Plus',
         version: 'Версия',
         community: 'Сообщество'
       },

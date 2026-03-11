@@ -52,7 +52,7 @@ export const Recorder = () => {
         suggestedName: `recording-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.webm`,
         types: [
           {
-            description: 'Sipeed NanoKVM-USB Recorder',
+            description: 'Sipeed NanoKVM-USB Plus Recorder',
             accept: { 'video/webm': ['.webm'] }
           }
         ]

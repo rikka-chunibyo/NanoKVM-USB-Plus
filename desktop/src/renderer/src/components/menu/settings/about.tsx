@@ -21,7 +21,7 @@ export const About = (): ReactElement => {
     {
       name: 'GitHub',
       icon: <GithubOutlined style={{ fontSize: '20px' }} width={24} height={24} />,
-      url: 'https://github.com/sipeed/NanoKVM-USB'
+      url: 'https://github.com/rikka-chunibyo/NanoKVM-USB-Plus'
     },
     {
       name: 'X',
@@ -55,7 +55,7 @@ export const About = (): ReactElement => {
         <img src={icon} className="pointer-events-none h-[64px] w-[64px]" alt="maix" />
 
         <div className="flex flex-col space-y-1">
-          <span className="text-settings-active-foreground text-sm font-bold">NanoKVM-USB</span>
+          <span className="text-settings-active-foreground text-sm font-bold">NanoKVM-USB Plus</span>
           <span className="text-settings-foreground text-sm">{version}</span>
         </div>
       </div>

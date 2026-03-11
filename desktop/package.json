@@ -1,10 +1,10 @@
 {
-  "name": "nanokvm-usb",
+  "name": "nanokvm-usb-plus",
   "version": "1.1.4",
-  "description": "NanoKVM-USB Desktop",
+  "description": "NanoKVM-USB Plus Desktop",
   "main": "./out/main/index.js",
-  "author": "sipeed.com",
-  "homepage": "https://github.com/nyxri/NanoKVM-USB-Plus",
+  "author": "rikka-chunibyo",
+  "homepage": "https://github.com/rikka-chunibyo/NanoKVM-USB-Plus",
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint --cache .",
@@ -23,8 +23,8 @@
     "build:linux-full": "electron-vite build && electron-builder --publish never --linux AppImage --x64 --arm64"
   },
   "build": {
-    "appId": "com.sipeed.nanokvm-usb",
-    "productName": "NanoKVM-USB",
+    "appId": "com.rikka-chunibyo.nanokvm-usb-plus",
+    "productName": "NanoKVM-USB Plus",
     "asar": true,
     "asarUnpack": [
       "**/node_modules/serialport/**",
@@ -45,7 +45,8 @@
           ]
         }
       ],
-      "icon": "resources/icon.ico"
+      "icon": "resources/icon.ico",
+      "executableName": "NanoKVM-USB-Plus"
     },
     "mac": {
       "target": [
@@ -77,8 +78,8 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "NanoKVM-USB",
-      "artifactName": "${productName}-${version}-setup.exe"
+      "shortcutName": "NanoKVM-USB Plus",
+      "artifactName": "NanoKVM-USB-Plus-${version}-setup.exe" 
     },
     "buildDependenciesFromSource": false,
     "npmRebuild": false
@@ -165,6 +166,6 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/nyxri/NanoKVM-USB-Plus"
+    "url": "https://github.com/rikka-chunibyo/NanoKVM-USB-Plus"
   }
 }

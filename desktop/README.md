@@ -1,6 +1,6 @@
-# NanoKVM-USB Desktop
+# NanoKVM-USB Plus Desktop
 
-This is the NanoKVM-USB desktop version project.
+This is the NanoKVM-USB Plus desktop version project.
 
 ## Development
 

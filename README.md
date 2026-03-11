@@ -1,4 +1,6 @@
-# NanoKVM-USB
+# NanoKVM-USB Plus
+
+This project is unofficial. This is just a fork I made of the desktop app (and maybe browser soon) to add scripts and some nice convenience features. Like screenshots and tooltips. It uses the same hardware as the normal one, the only difference is in the app.
 
 <div align="center">
 
@@ -43,13 +45,15 @@ NanoKVM-USB captures HDMI video signals and transmits them to the host via USB 3
 
 ## Resources
 
-We offer two versions of the application: [Browser](https://github.com/sipeed/NanoKVM-USB/tree/main/browser) and [Desktop](https://github.com/sipeed/NanoKVM-USB/tree/main/desktop). Both are available on the [Releases page](https://github.com/sipeed/NanoKVM-USB/releases).
+We offer two versions of the application: [Browser](https://github.com/rikka-chunibyo/NanoKVM-USB-Plus/tree/main/browser) and [Desktop](https://github.com/rikka-chunibyo/NanoKVM-USB-Plus/tree/main/desktop). Both are available on the [Releases page](https://github.com/rikka-chunibyo/NanoKVM-USB-Plus/releases).
+
+If you are looking for the original, click [here](https://github.com/sipeed/NanoKVM-USB). This is a nice fork I made, which you can find more info about at the top under the title.
 
 ### Browser Version
 
 Access our online service at [usbkvm.sipeed.com](https://usbkvm.sipeed.com).
 
-For self-deployment, download the `NanoKVM-USB-xxx-browser.zip` and serve it. Refer to the [Deployment Guide](https://wiki.sipeed.com/hardware/en/kvm/NanoKVM_USB/development.html) for details. If you are using Docker, simply run `docker-compose up -d`.
+For self-deployment, download the `NanoKVM-USB-Plus-xxx-browser.zip` and serve it. Refer to the [Deployment Guide](https://wiki.sipeed.com/hardware/en/kvm/NanoKVM_USB/development.html) for details. If you are using Docker, simply run `docker-compose up -d`.
 
 
 > Please use the desktop Chrome browser.

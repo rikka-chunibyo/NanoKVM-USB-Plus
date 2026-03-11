@@ -1,4 +1,4 @@
 provider: github
-owner: sipeed
-repo: NanoKVM-USB
-updaterCacheDirName: nanokvm-usb-updater
+owner: rikka-chunibyo
+repo: NanoKVM-USB-Plus
+updaterCacheDirName: nanokvm-usb-plus-updater

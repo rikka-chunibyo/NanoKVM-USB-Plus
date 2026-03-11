@@ -1,18 +1,18 @@
 import type { Resolution, Rotation } from '@/types';
 
-const LANGUAGE_KEY = 'nanokvm-usb-language';
-const VIDEO_DEVICE_ID_KEY = 'nanokvm-usb-video-device-id';
-const VIDEO_RESOLUTION_KEY = 'nanokvm-usb-video-resolution';
-const CUSTOM_RESOLUTION_KEY = 'nanokvm-usb-custom-resolution';
-const VIDEO_SCALE_KEY = 'nanokvm-usb-video-scale';
-const VIDEO_ROTATION_KEY = 'nanokvm-usb-video-rotation';
+const LANGUAGE_KEY = 'nanokvm-usb-plus-language';
+const VIDEO_DEVICE_ID_KEY = 'nanokvm-usb-plus-video-device-id';
+const VIDEO_RESOLUTION_KEY = 'nanokvm-usb-plus-video-resolution';
+const CUSTOM_RESOLUTION_KEY = 'nanokvm-usb-plus-custom-resolution';
+const VIDEO_SCALE_KEY = 'nanokvm-usb-plus-video-scale';
+const VIDEO_ROTATION_KEY = 'nanokvm-usb-plus-video-rotation';
 const IS_MENU_OPEN_KEY = 'nanokvm-is-menu-open';
-const MOUSE_STYLE_KEY = 'nanokvm-usb-mouse-style';
-const MOUSE_MODE_KEY = 'nanokvm-usb-mouse-mode';
-const MOUSE_SCROLL_DIRECTION_KEY = 'nanokvm-usb-mouse-scroll-direction';
-const MOUSE_SCROLL_INTERVAL_KEY = 'nanokvm-usb-mouse-scroll-interval';
-const MOUSE_JIGGLER_MODE_KEY = 'nanokvm-usb-mouse-jiggler-mode';
-const KEYBOARD_SHORTCUT_KEY = 'nanokvm-usb-keyboard-shortcut';
+const MOUSE_STYLE_KEY = 'nanokvm-usb-plus-mouse-style';
+const MOUSE_MODE_KEY = 'nanokvm-usb-plus-mouse-mode';
+const MOUSE_SCROLL_DIRECTION_KEY = 'nanokvm-usb-plus-mouse-scroll-direction';
+const MOUSE_SCROLL_INTERVAL_KEY = 'nanokvm-usb-plus-mouse-scroll-interval';
+const MOUSE_JIGGLER_MODE_KEY = 'nanokvm-usb-plus-mouse-jiggler-mode';
+const KEYBOARD_SHORTCUT_KEY = 'nanokvm-usb-plus-keyboard-shortcut';
 
 export function getLanguage() {
   return localStorage.getItem(LANGUAGE_KEY);

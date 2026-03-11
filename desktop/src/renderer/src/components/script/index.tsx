@@ -54,7 +54,7 @@ const EXAMPLES: Record<ScriptType, Example[]> = {
       label: 'Hello World',
       source: `log Starting
 delay 500
-type Hello from NanoKVM-USB!
+type Hello from NanoKVM-USB Plus!
 key enter
 `,
     },
@@ -65,7 +65,7 @@ delay 500
 type notepad
 key enter
 delay 1000
-type Hello from NanoKVM-USB!
+type Hello from NanoKVM-USB Plus!
 `,
     },
     {
@@ -91,7 +91,7 @@ log Done — check console for path
       label: 'Hello World',
       source: `kvm.log('Starting')
 await kvm.delay(500)
-await kvm.type('Hello from NanoKVM-USB!')
+await kvm.type('Hello from NanoKVM-USB Plus!')
 await kvm.key('enter')
 `,
     },
@@ -135,7 +135,7 @@ for (const [x, y] of points) {
 
 kvm.log('Starting')
 kvm.delay(500)
-kvm.type('Hello from NanoKVM-USB!')
+kvm.type('Hello from NanoKVM-USB Plus!')
 kvm.key('enter')
 `,
     },

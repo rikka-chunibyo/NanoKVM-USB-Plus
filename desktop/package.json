@@ -4,7 +4,7 @@
   "description": "NanoKVM-USB Desktop",
   "main": "./out/main/index.js",
   "author": "sipeed.com",
-  "homepage": "https://github.com/sipeed/NanoKVM-USB",
+  "homepage": "https://github.com/nyxri/NanoKVM-USB-Plus",
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint --cache .",
@@ -14,13 +14,13 @@
     "start": "electron-vite preview",
     "dev": "electron-vite dev",
     "build": "npm run typecheck && electron-vite build",
-    "build:unpack": "npm run build && electron-builder --dir",
-    "build:win": "npm run build && electron-builder --win nsis --x64",
-    "build:mac": "electron-vite build && electron-builder --mac dmg --x64",
-    "build:linux": "electron-vite build && electron-builder --linux AppImage --x64",
-    "build:win-full": "npm run build && electron-builder --win nsis --x64 --arm64",
-    "build:mac-full": "electron-vite build && electron-builder --mac dmg --x64 --arm64",
-    "build:linux-full": "electron-vite build && electron-builder --linux AppImage --x64 --arm64"
+    "build:unpack": "npm run build && electron-builder --publish never --dir",
+    "build:win": "npm run build && electron-builder --publish never --win nsis --x64",
+    "build:mac": "electron-vite build && electron-builder --publish never --mac dmg --x64",
+    "build:linux": "electron-vite build && electron-builder --publish never --linux AppImage --x64",
+    "build:win-full": "npm run build && electron-builder --publish never --win nsis --x64 --arm64",
+    "build:mac-full": "electron-vite build && electron-builder --publish never --mac dmg --x64 --arm64",
+    "build:linux-full": "electron-vite build && electron-builder --publish never --linux AppImage --x64 --arm64"
   },
   "build": {
     "appId": "com.sipeed.nanokvm-usb",
@@ -162,5 +162,9 @@
   },
   "electronRebuildConfig": {
     "buildFromSource": false
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nyxri/NanoKVM-USB-Plus"
   }
 }

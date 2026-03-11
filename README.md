@@ -2,6 +2,8 @@
 
 This project is unofficial. This is just a fork I made of the desktop app (and maybe browser soon) to add scripts and some nice convenience features. Like screenshots and tooltips. It uses the same hardware as the normal one, the only difference is in the app.
 
+AI was used heavily for this, since I've never gone about adding scripting languages to websites, and I just wanted something nice quickly. I haven't noticed any problems with the latest actual code commit (de35927) and any problems I have come across I have also fixed.
+
 <div align="center">
 
 ![NanoKVM-USB](https://wiki.sipeed.com/hardware/assets/NanoKVM/usb/NanoKVM-USB.png)

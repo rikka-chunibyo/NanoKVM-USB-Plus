@@ -4,6 +4,18 @@ This project is unofficial. This is just a fork I made of the desktop app (and m
 
 AI was used heavily for this, since I've never gone about adding scripting languages to websites, and I just wanted something nice quickly. I haven't noticed any problems with the latest actual code commit (de35927) and any problems I have come across I have also fixed.
 
+## License and attribution
+
+NanoKVM-USB Plus is a modified version of [Sipeed's NanoKVM-USB](https://github.com/sipeed/NanoKVM-USB).
+Credit for the original software belongs to Sipeed and the upstream
+contributors. [rikka-chunibyo](https://github.com/rikka-chunibyo) maintains the
+Plus changes, which add desktop scripting, screenshots, and tooltips.
+
+This fork carries forward the upstream [GNU GPL version 3 license](LICENSE).
+Preserve applicable copyright, license, and modification notices when
+redistributing the software, and provide corresponding source as required by
+the GPL.
+
 <div align="center">
 
 ![NanoKVM-USB](https://wiki.sipeed.com/hardware/assets/NanoKVM/usb/NanoKVM-USB.png)

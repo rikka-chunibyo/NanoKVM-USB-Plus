@@ -11,6 +11,7 @@ export class SerialPort {
   readonly READ_TIMEOUT = 500
 
   private port: SP | null
+  private opening = false
   private onDisconnect?: () => void
 
   constructor() {
@@ -18,6 +19,8 @@ export class SerialPort {
   }
 
   async init(options: Options): Promise<void> {
+    if (this.opening) throw new Error('A serial connection is already in progress')
+    this.opening = true
     try {
       if (this.port?.isOpen) {
         await this.close()
@@ -27,33 +30,29 @@ export class SerialPort {
       const path = options.path
       const baudRate = options.baudRate || this.SERIAL_BAUD_RATE
 
-      this.port = new SP({ path, baudRate }, (err) => {
-        if (err) {
-          console.error('Error opening port: ', err.message)
-          throw err
-        }
+      const port = new SP({ path, baudRate, autoOpen: false })
+      await new Promise<void>((resolve, reject) => {
+        port.open((error) => error ? reject(error) : resolve())
       })
 
-      if (options.onDisconnect) {
-        this.onDisconnect = options.onDisconnect
-      }
+      this.port = port
+      this.onDisconnect = options.onDisconnect
 
-      this.port.on('close', () => {
+      port.on('close', () => {
         console.warn('Serial port closed event received')
         this.handleDisconnect()
       })
 
-      this.port.on('error', (err) => {
+      port.on('error', (err) => {
         console.error('Serial port error:', err)
         if (this.isDisconnectError(err)) {
           this.handleDisconnect()
         }
       })
 
-      this.port.on('data', () => {})
-    } catch (err) {
-      console.error('Error opening serial port:', err)
-      throw err
+      port.on('data', () => {})
+    } finally {
+      this.opening = false
     }
   }
 

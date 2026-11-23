@@ -1,22 +1,12 @@
-FROM node:24-alpine3.21 AS frontend
+FROM node:22-alpine AS frontend
 WORKDIR /app
 
-COPY browser browser
+COPY browser/package.json browser/pnpm-lock.yaml browser/pnpm-workspace.yaml ./
+RUN corepack enable && pnpm install --frozen-lockfile
 
-RUN yarn global add http-server
+COPY browser/ ./
+RUN pnpm build
 
-RUN cd browser && \
-    yarn install && \
-    yarn build
-
-FROM nginx:1.29.1-alpine   
-
-COPY --from=frontend /app/browser/dist /usr/share/nginx/html
-
-RUN apk add tzdata
-
+FROM nginx:stable-alpine
 COPY nginx.conf /etc/nginx/nginx.conf
-COPY --from=frontend /app/browser/dist /usr/share/nginx/html
-RUN ls -alh /usr/share/nginx/html
-EXPOSE 80
-ENTRYPOINT ["nginx", "-g", "daemon off;"]
+COPY --from=frontend /app/dist/ /usr/share/nginx/html/

@@ -49,6 +49,24 @@ jobs:
           if-no-files-found: error
           retention-days: 3
 
+  docker:
+    name: Browser Docker image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Build the Compose image
+        run: docker compose build
+      - name: Check that nginx serves the browser app
+        run: |
+          container=$(docker run --detach --rm --publish 127.0.0.1::80 nanokvm-usb-plus:local)
+          trap 'docker stop "$container" >/dev/null' EXIT
+          address=$(docker port "$container" 80/tcp)
+          curl --fail --silent --show-error --retry 10 --retry-delay 1 --retry-connrefused \
+            "http://$address/" -o browser-index.html
+          grep -F 'id="root"' browser-index.html
+
   desktop:
     name: Desktop (${{ matrix.platform }})
     runs-on: ${{ matrix.runner }}

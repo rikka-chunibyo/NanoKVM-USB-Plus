@@ -1,0 +1,5 @@
+.git
+desktop/
+**/node_modules/
+**/dist/
+**/*.tsbuildinfo

@@ -4,65 +4,47 @@ on:
   issues:
     types: [opened, reopened, closed]
 
+permissions: {}
+
 jobs:
   track-issue:
-    name: Track Issue Updates
     runs-on: ubuntu-latest
-
     steps:
-      - name: Send Issue Data to API
+      - name: Send issue data to the configured API
         env:
-          RAW_TITLE: ${{ github.event.issue.title }}
-          RAW_BODY: ${{ github.event.issue.body }}
-          RAW_LABELS: ${{ toJSON(github.event.issue.labels) }}
-          RAW_ASSIGNEES: ${{ toJSON(github.event.issue.assignees) }}
           API_URL: ${{ secrets.ISSUE_TRACKER_API_URL }}
           VERIFY_TOKEN: ${{ secrets.VERIFY_TOKEN }}
         run: |
-          ISSUE_DATA=$(jq -n \
-            --arg action "${{ github.event.action }}" \
-            --arg id "${{ github.event.issue.id }}" \
-            --arg num "${{ github.event.issue.number }}" \
-            --arg title "$RAW_TITLE" \
-            --arg body "$RAW_BODY" \
-            --arg state "${{ github.event.issue.state }}" \
-            --arg created_at "${{ github.event.issue.created_at }}" \
-            --arg updated_at "${{ github.event.issue.updated_at }}" \
-            --arg closed_at "${{ github.event.issue.closed_at }}" \
-            --arg url "${{ github.event.issue.html_url }}" \
-            --arg user_login "${{ github.event.issue.user.login }}" \
-            --arg repository "${{ github.repository }}" \
-            --argjson labels "$RAW_LABELS" \
-            --argjson assignees "$RAW_ASSIGNEES" \
-            '{
-              action: $action,
-              issue: {
-                id: ($id | tonumber),
-                number: ($num | tonumber),
-                title: $title,
-                body: $body,
-                state: $state,
-                created_at: $created_at,
-                updated_at: $updated_at,
-                closed_at: $closed_at,
-                url: $url,
-                user: { login: $user_login },
-                labels: $labels,
-                assignees: $assignees
-              },
-              repository: { name: $repository },
-            }')
+          if [[ -z "$API_URL" || -z "$VERIFY_TOKEN" ]]; then
+            echo "Issue tracker integration is not configured."
+            exit 0
+          fi
 
-          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$API_URL" \
-            -H "Content-Type: application/json" \
-            -H "Token: $VERIFY_TOKEN" \
-            -d "$ISSUE_DATA")
+          payload=$(jq -c '{
+            action,
+            issue: (.issue | {
+              id,
+              number,
+              title,
+              body: (.body // ""),
+              state,
+              created_at,
+              updated_at,
+              closed_at: (.closed_at // ""),
+              url: .html_url,
+              user: (.user | {login}),
+              labels,
+              assignees
+            }),
+            repository: {name: .repository.full_name}
+          }' "$GITHUB_EVENT_PATH")
 
-          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+            --proto '=https' --max-time 20 --request POST "$API_URL" \
+            --header 'Content-Type: application/json' \
+            --header "Token: $VERIFY_TOKEN" --data-binary "$payload")
 
-          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
-            echo "Successfully sent issue data to API"
-          else
-            echo "Failed to send issue data to API"
+          if [[ "$status" != 2?? ]]; then
+            echo "::error::Issue tracker returned HTTP $status"
             exit 1
           fi

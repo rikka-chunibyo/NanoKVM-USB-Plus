@@ -13,9 +13,11 @@
  *   CLOSE_VIDEO_WRITE_STREAM→ closes the stream, returns { ok, path }
  */
 
+import { once } from 'node:events'
 import fs from 'node:fs'
 import path from 'node:path'
-import { app, dialog, ipcMain } from 'electron'
+import { finished } from 'node:stream/promises'
+import { app, BrowserWindow, dialog, ipcMain } from 'electron'
 
 import { IpcEvents } from '../../common/ipc-events'
 
@@ -31,7 +33,7 @@ export function registerFiles(): void {
 
   // ── OPEN_DIR_PICKER ─────────────────────────────────────────────────────
   ipcMain.handle(IpcEvents.OPEN_DIR_PICKER, async (event) => {
-    const win = require('electron').BrowserWindow.fromWebContents(event.sender)
+    const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) return null
     const result = await dialog.showOpenDialog(win, {
       title: 'Choose save folder',
@@ -49,14 +51,18 @@ export function registerFiles(): void {
     filename: string
   }) => {
     try {
+      if (!payload.filename || path.basename(payload.filename) !== payload.filename ||
+          path.extname(payload.filename).toLowerCase() !== '.png') {
+        return { ok: false, error: 'Invalid screenshot file name' }
+      }
       const dir = payload.dir || app.getPath('downloads')
       fs.mkdirSync(dir, { recursive: true })
       const fullPath = path.join(dir, payload.filename)
       const buf = Buffer.from(payload.base64.replace(/^data:image\/\w+;base64,/, ''), 'base64')
       fs.writeFileSync(fullPath, buf)
       return { ok: true, path: fullPath }
-    } catch (err: any) {
-      return { ok: false, error: err.message }
+    } catch (error) {
+      return { ok: false, error: String(error) }
     }
   })
 
@@ -66,7 +72,7 @@ export function registerFiles(): void {
     defaultPath: string
     filters: { name: string; extensions: string[] }[]
   }) => {
-    const win = require('electron').BrowserWindow.fromWebContents(event.sender)
+    const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) return null
     const result = await dialog.showSaveDialog(win, {
       defaultPath: payload.defaultPath,
@@ -76,35 +82,45 @@ export function registerFiles(): void {
   })
 
   // ── OPEN_VIDEO_WRITE_STREAM ─────────────────────────────────────────────
-  ipcMain.handle(IpcEvents.OPEN_VIDEO_WRITE_STREAM, (_, filePath: string) => {
+  ipcMain.handle(IpcEvents.OPEN_VIDEO_WRITE_STREAM, async (_, filePath: string) => {
     try {
       fs.mkdirSync(path.dirname(filePath), { recursive: true })
       const stream = fs.createWriteStream(filePath)
       const id = String(++streamCounter)
+      stream.on('error', () => writeStreams.delete(id))
+      await once(stream, 'open')
       writeStreams.set(id, { stream, path: filePath })
       return { ok: true, streamId: id }
-    } catch (err: any) {
-      return { ok: false, error: err.message }
+    } catch (error) {
+      return { ok: false, error: String(error) }
     }
   })
 
-  // ── WRITE_VIDEO_CHUNK ───────────────────────────────────────────────────
   ipcMain.handle(IpcEvents.WRITE_VIDEO_CHUNK, async (_, streamId: string, base64: string) => {
     const entry = writeStreams.get(streamId)
     if (!entry) return { ok: false, error: 'Stream not found' }
-    const buf = Buffer.from(base64, 'base64')
-    await new Promise<void>((resolve, reject) => {
-      entry.stream.write(buf, (err) => err ? reject(err) : resolve())
-    })
-    return { ok: true }
+    try {
+      const buffer = Buffer.from(base64, 'base64')
+      await new Promise<void>((resolve, reject) => {
+        entry.stream.write(buffer, (error) => error ? reject(error) : resolve())
+      })
+      return { ok: true }
+    } catch (error) {
+      return { ok: false, error: String(error) }
+    }
   })
 
-  // ── CLOSE_VIDEO_WRITE_STREAM ────────────────────────────────────────────
   ipcMain.handle(IpcEvents.CLOSE_VIDEO_WRITE_STREAM, async (_, streamId: string) => {
     const entry = writeStreams.get(streamId)
     if (!entry) return { ok: false, error: 'Stream not found' }
-    await new Promise<void>((resolve) => entry.stream.end(resolve))
     writeStreams.delete(streamId)
-    return { ok: true, path: entry.path }
+    try {
+      const completion = finished(entry.stream, { cleanup: true })
+      entry.stream.end()
+      await completion
+      return { ok: true, path: entry.path }
+    } catch (error) {
+      return { ok: false, error: String(error) }
+    }
   })
 }

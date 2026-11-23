@@ -20,6 +20,12 @@ export class JsRunnerError extends Error {
   }
 }
 
+function compile(source: string): vm.Script {
+  return new vm.Script('(async function __kvm__() {\n' + source + '\n})()', {
+    filename: 'kvm-script.js'
+  })
+}
+
 export async function runJavaScript(
   source: string,
   kvm: KvmApi,
@@ -51,24 +57,30 @@ export async function runJavaScript(
 
   let script: vm.Script
   try {
-    script = new vm.Script(`(async function __kvm__() {\n${source}\n})()`, {
-      filename: 'kvm-script.js'
-    })
+    script = compile(source)
   } catch (err) {
     throw new JsRunnerError(`Syntax error: ${(err as Error).message}`)
   }
 
-  const scriptPromise = script.runInContext(context) as Promise<void>
-
-  await new Promise<void>((resolve, reject) => {
-    signal.addEventListener('abort', () => reject(new JsRunnerError('Script stopped')), { once: true })
-    scriptPromise.then(resolve).catch((err) => reject(new JsRunnerError((err as Error).message ?? String(err))))
-  })
+  signal.throwIfAborted()
+  let cancel: (() => void) | undefined
+  try {
+    const scriptPromise = script.runInContext(context, { timeout: 5000 }) as Promise<void>
+    await new Promise<void>((resolve, reject) => {
+      cancel = () => reject(new JsRunnerError('Script stopped'))
+      signal.addEventListener('abort', cancel, { once: true })
+      void scriptPromise.then(resolve, reject)
+    })
+  } catch (error) {
+    throw new JsRunnerError(error instanceof Error ? error.message : String(error))
+  } finally {
+    if (cancel) signal.removeEventListener('abort', cancel)
+  }
 }
 
 export function validateJavaScript(source: string): { ok: boolean; error?: string } {
   try {
-    new vm.Script(`(async function(){${source}})()`)
+    compile(source)
     return { ok: true }
   } catch (err) {
     return { ok: false, error: (err as Error).message }

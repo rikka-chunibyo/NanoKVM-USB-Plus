@@ -6,27 +6,27 @@ import { IpcEvents } from '../../common/ipc-events'
 autoUpdater.autoDownload = false
 autoUpdater.forceDevUpdateConfig = true
 
-export function registerUpdater(win: BrowserWindow): void {
+export function registerUpdater(getWindow: () => BrowserWindow | undefined): void {
   autoUpdater.on('update-available', (info) => {
-    win.webContents.send(IpcEvents.UPDATE_AVAILABLE, info)
+    getWindow()?.webContents.send(IpcEvents.UPDATE_AVAILABLE, info)
   })
 
   autoUpdater.on('update-not-available', () => {
-    win.webContents.send(IpcEvents.UPDATE_NOT_AVAILABLE)
+    getWindow()?.webContents.send(IpcEvents.UPDATE_NOT_AVAILABLE)
   })
 
   autoUpdater.on('error', (err) => {
     console.error(err)
-    win.webContents.send(IpcEvents.UPDATE_ERROR)
+    getWindow()?.webContents.send(IpcEvents.UPDATE_ERROR)
   })
 
   autoUpdater.on('download-progress', (progressObj) => {
     const percent = Math.ceil(progressObj.percent)
-    win.webContents.send(IpcEvents.DOWNLOAD_PROGRESS, percent)
+    getWindow()?.webContents.send(IpcEvents.DOWNLOAD_PROGRESS, percent)
   })
 
   autoUpdater.on('update-downloaded', () => {
-    win.webContents.send(IpcEvents.UPDATE_DOWNLOADED)
+    getWindow()?.webContents.send(IpcEvents.UPDATE_DOWNLOADED)
     setImmediate(() => autoUpdater.quitAndInstall())
   })
 
@@ -41,10 +41,6 @@ export function registerUpdater(win: BrowserWindow): void {
   })
 
   ipcMain.on(IpcEvents.DOWNLOAD_UPDATE, () => {
-    try {
-      autoUpdater.downloadUpdate()
-    } catch (e) {
-      console.error(e)
-    }
+    void autoUpdater.downloadUpdate().catch(console.error)
   })
 }

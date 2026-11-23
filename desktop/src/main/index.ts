@@ -8,10 +8,10 @@ import * as events from './events'
 
 console.error = log.error
 
-let mainWindow: BrowserWindow
+let mainWindow: BrowserWindow | undefined
 
 function createWindow(): void {
-  mainWindow = new BrowserWindow({
+  const window = new BrowserWindow({
     width: 800,
     height: 600,
     show: false,
@@ -23,29 +23,34 @@ function createWindow(): void {
     }
   })
 
-  mainWindow.on('ready-to-show', () => {
-    mainWindow.maximize()
-    mainWindow.show()
+  mainWindow = window
+  window.on('closed', () => {
+    if (mainWindow === window) mainWindow = undefined
+  })
+  window.on('ready-to-show', () => {
+    window.maximize()
+    window.show()
   })
 
-  mainWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
+  window.webContents.on('will-navigate', (event) => event.preventDefault())
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) void shell.openExternal(url).catch(console.error)
     return { action: 'deny' }
   })
 
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
+    window.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+    window.loadFile(join(__dirname, '../renderer/index.html'))
   }
 }
 
 app.whenReady().then(() => {
-  electronApp.setAppUserModelId('com.sipeed.usbkvm')
+  electronApp.setAppUserModelId('com.rikka-chunibyo.nanokvm-usb-plus')
 
-  session.defaultSession.setPermissionRequestHandler((_, permission, callback) => {
+  session.defaultSession.setPermissionRequestHandler((contents, permission, callback, details) => {
     const allowedPermissions = ['media', 'clipboard-read', 'pointerLock']
-    callback(allowedPermissions.includes(permission))
+    callback(contents === mainWindow?.webContents && details.isMainFrame && allowedPermissions.includes(permission))
   })
 
   app.on('browser-window-created', (_, window) => {
@@ -58,8 +63,8 @@ app.whenReady().then(() => {
 
   createWindow()
 
-  events.registerUpdater(mainWindow)
-  events.registerScripting(mainWindow)  // ← new
+  events.registerUpdater(() => mainWindow)
+  events.registerScripting(() => mainWindow)
 
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

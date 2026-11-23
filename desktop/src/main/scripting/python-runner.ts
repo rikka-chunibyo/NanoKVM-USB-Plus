@@ -20,7 +20,8 @@ import * as fs from 'fs'
 import * as net from 'net'
 import * as os from 'os'
 import * as path from 'path'
-import { spawn, ChildProcess } from 'child_process'
+import { spawn } from 'child_process'
+import { randomBytes } from 'node:crypto'
 
 import { KvmApi } from './kvm-api'
 
@@ -49,7 +50,7 @@ def _call(cmd, *args):
     if _sock is None:
         _connect()
     _req_id += 1
-    msg = json.dumps({'id': _req_id, 'cmd': cmd, 'args': list(args)}) + '\\n'
+    msg = json.dumps({'id': _req_id, 'cmd': cmd, 'args': list(args), 'token': os.environ['KVM_TOKEN']}) + '\\n'
     _sock.sendall(msg.encode())
     buf = b''
     while b'\\n' not in buf:
@@ -118,6 +119,7 @@ async function findPython(): Promise<string> {
 // ---------------------------------------------------------------------------
 
 type KvmCommand = {
+  token: string
   id: number
   cmd: string
   args: unknown[]
@@ -145,50 +147,64 @@ async function dispatchCommand(cmd: KvmCommand, kvm: KvmApi): Promise<unknown> {
   }
 }
 
-function startTcpServer(kvm: KvmApi, signal: AbortSignal): Promise<number> {
+function startTcpServer(
+  kvm: KvmApi, signal: AbortSignal, token: string
+): Promise<{ port: number; close: () => void }> {
   return new Promise((resolve, reject) => {
+    const sockets = new Set<net.Socket>()
     const server = net.createServer((socket) => {
-      let buf = ''
+      sockets.add(socket)
+      socket.once('close', () => sockets.delete(socket))
+      socket.on('error', () => socket.destroy())
+      socket.setEncoding('utf8')
 
-      socket.on('data', (chunk) => {
-        buf += chunk.toString()
-        const lines = buf.split('\n')
-        buf = lines.pop()! // keep incomplete line
-
+      let buffer = ''
+      let queue = Promise.resolve()
+      socket.on('data', (chunk: string) => {
+        buffer += chunk
+        if (Buffer.byteLength(buffer) > 1024 * 1024) {
+          socket.destroy()
+          return
+        }
+        const lines = buffer.split('\n')
+        buffer = lines.pop() ?? ''
         for (const line of lines) {
           if (!line.trim()) continue
-          let cmd: KvmCommand
+          let command: KvmCommand
           try {
-            cmd = JSON.parse(line)
+            command = JSON.parse(line)
+            if (!command || command.token !== token || !Number.isSafeInteger(command.id) ||
+                typeof command.cmd !== 'string' || !Array.isArray(command.args)) {
+              socket.destroy()
+              return
+            }
           } catch {
-            socket.write(JSON.stringify({ id: -1, ok: false, error: 'Invalid JSON' }) + '\n')
-            continue
+            socket.destroy()
+            return
           }
-
-          // Execute async, but serialize responses per connection
-          dispatchCommand(cmd, kvm)
-            .then((result) => {
-              socket.write(JSON.stringify({ id: cmd.id, ok: true, result }) + '\n')
-            })
-            .catch((err) => {
-              socket.write(JSON.stringify({ id: cmd.id, ok: false, error: String(err) }) + '\n')
-            })
+          queue = queue.then(async () => {
+            if (signal.aborted || socket.destroyed) return
+            let response: object
+            try {
+              response = { id: command.id, ok: true, result: await dispatchCommand(command, kvm) }
+            } catch (error) {
+              response = { id: command.id, ok: false, error: String(error) }
+            }
+            if (!socket.destroyed) socket.write(JSON.stringify(response) + '\n')
+          })
         }
       })
-
-      socket.on('error', () => { /* client disconnected */ })
     })
 
-    signal.addEventListener('abort', () => {
+    const close = (): void => {
+      for (const socket of sockets) socket.destroy()
       server.close()
-    })
-
+    }
+    server.once('error', reject)
     server.listen(0, '127.0.0.1', () => {
-      const addr = server.address() as net.AddressInfo
-      resolve(addr.port)
+      const address = server.address() as net.AddressInfo
+      resolve({ port: address.port, close })
     })
-
-    server.on('error', reject)
   })
 }
 
@@ -209,18 +225,22 @@ export async function runPython(
   signal: AbortSignal
 ): Promise<void> {
   const python = await findPython()
+  if (signal.aborted) return
 
   // Write kvm.py to temp dir
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kvm-py-'))
   const kvmPyPath  = path.join(tmpDir, 'kvm.py')
   const scriptPath = path.join(tmpDir, 'script.py')
 
+  let closeServer: (() => void) | undefined
   try {
     fs.writeFileSync(kvmPyPath, KVM_PY_SOURCE.trimStart(), 'utf-8')
     fs.writeFileSync(scriptPath, source, 'utf-8')
 
     // Start TCP server
-    const port = await startTcpServer(kvm, signal)
+    const token = randomBytes(32).toString('hex')
+    const { port, close } = await startTcpServer(kvm, signal, token)
+    closeServer = close
 
     // Spawn Python
     await new Promise<void>((resolve, reject) => {
@@ -229,11 +249,12 @@ export async function runPython(
       const env = {
         ...process.env,
         KVM_PORT: String(port),
+        KVM_TOKEN: token,
         PYTHONPATH: [tmpDir, process.env.PYTHONPATH].filter(Boolean).join(path.delimiter),
         PYTHONUNBUFFERED: '1',
       }
 
-      const proc: ChildProcess = spawn(python, [scriptPath], { env, stdio: ['ignore', 'pipe', 'pipe'] })
+      const proc = spawn(python, [scriptPath], { env, stdio: ['ignore', 'pipe', 'pipe'] })
 
       proc.stdout?.on('data', (d: Buffer) => {
         for (const line of d.toString().split('\n').filter(Boolean)) {
@@ -247,24 +268,30 @@ export async function runPython(
         }
       })
 
-      signal.addEventListener('abort', () => {
+      let killTimer: NodeJS.Timeout | undefined
+      const terminate = (): void => {
         proc.kill('SIGTERM')
-        setTimeout(() => proc.kill('SIGKILL'), 1000)
-      }, { once: true })
+        killTimer = setTimeout(() => proc.kill('SIGKILL'), 1000)
+      }
+      const cleanUp = (): void => {
+        signal.removeEventListener('abort', terminate)
+        clearTimeout(killTimer)
+      }
+      signal.addEventListener('abort', terminate, { once: true })
 
-      proc.on('close', (code) => {
-        if (signal.aborted || code === 0 || code === null) {
-          resolve()
-        } else {
-          reject(new PythonRunnerError(`Python exited with code ${code}`))
-        }
+      proc.once('close', (code) => {
+        cleanUp()
+        if (signal.aborted || code === 0) resolve()
+        else reject(new PythonRunnerError('Python exited ' + (code === null ? 'without an exit code' : 'with code ' + code)))
       })
 
-      proc.on('error', (err) => {
+      proc.once('error', (err) => {
+        cleanUp()
         reject(new PythonRunnerError(err.message))
       })
     })
   } finally {
+    closeServer?.()
     try { fs.rmSync(tmpDir, { recursive: true, force: true }) } catch { /* ignore */ }
   }
 }

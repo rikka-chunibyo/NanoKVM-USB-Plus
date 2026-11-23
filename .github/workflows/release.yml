@@ -4,177 +4,199 @@ on:
   workflow_dispatch:
     inputs:
       prerelease:
-        description: 'Mark as pre-release'
-        required: false
+        description: Mark as a prerelease
         type: boolean
         default: false
       draft:
-        description: 'Create as draft'
-        required: false
+        description: Keep the completed release as a draft
         type: boolean
         default: false
 
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.repository }}
+  cancel-in-progress: false
+
 env:
-  NODE_VERSION: '20'
+  NODE_VERSION: '22'
 
 jobs:
-  create-tag:
-    name: Create Git Tag
+  prepare:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     outputs:
-      release_tag: ${{ steps.version.outputs.tag }}
+      tag: ${{ steps.release.outputs.tag }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
-          fetch-depth: 0
-
-      - name: Read version from package.json
-        id: version
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+      - name: Prepare a draft for this commit
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRERELEASE: ${{ inputs.prerelease }}
         run: |
-          VERSION=$(jq -r .version desktop/package.json)
-          echo "tag=v${VERSION}" >> $GITHUB_OUTPUT
+          version=$(node -p 'require("./desktop/package.json").version')
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Invalid desktop package version"
+            exit 1
+          fi
+          tag="v$version"
+          tag_refs=$(git ls-remote origin "refs/tags/$tag" "refs/tags/$tag^{}")
+          tagged_sha=$(awk '/\^\{\}$/ { peeled=$1; next } { direct=$1 } END { print peeled ? peeled : direct }' <<< "$tag_refs")
+          if [[ -n "$tagged_sha" && "$tagged_sha" != "$GITHUB_SHA" ]]; then
+            echo "::error::$tag already points to another commit. Bump the desktop package version."
+            exit 1
+          fi
 
-      - name: Create and push tag
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a ${{ steps.version.outputs.tag }} -m "Release ${{ steps.version.outputs.tag }}"
-          git push origin ${{ steps.version.outputs.tag }}
+          if existing=$(gh release view "$tag" --json isDraft,isPrerelease,targetCommitish); then
+            if ! jq -e --arg sha "$GITHUB_SHA" --argjson prerelease "$PRERELEASE" \
+              '.isDraft and (.targetCommitish == $sha) and (.isPrerelease == $prerelease)' <<< "$existing" >/dev/null; then
+              echo "::error::$tag already has a release for a different commit or with different settings."
+              exit 1
+            fi
+          else
+            args=(--draft --target "$GITHUB_SHA" --generate-notes)
+            if [[ "$PRERELEASE" == true ]]; then args+=(--prerelease); fi
+            if [[ -n "$tagged_sha" ]]; then args+=(--verify-tag); fi
+            gh release create "$tag" "${args[@]}"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
-  build-browser:
-    name: Build Browser Bundle
-    needs: create-tag
+  browser:
+    needs: prepare
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     defaults:
       run:
         working-directory: browser
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
-          ref: ${{ needs.create-tag.outputs.release_tag }}
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: browser/package.json
+      - uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Build static site
-        run: npm run build
-
-      - name: Create browser archive
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Upload browser release asset
+        working-directory: browser/dist
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
         run: |
-           cd dist
-           zip -r ../nanokvm-usb-plus-browser-${{ needs.create-tag.outputs.release_tag }}.zip .
-           cd ..
+          archive="NanoKVM-USB-Plus-browser-$RELEASE_TAG.zip"
+          zip -qr "../$archive" .
+          test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true
+          gh release upload "$RELEASE_TAG" "../$archive" --clobber
 
-      - name: Upload browser artifact
-        uses: actions/upload-artifact@v4
-        with:
-           name: browser-release
-           path: browser/nanokvm-usb-plus-browser-${{ needs.create-tag.outputs.release_tag }}.zip
-           if-no-files-found: error
-
-  build-desktop:
-    name: Build Desktop Apps
-    needs: create-tag
-    runs-on: ${{ matrix.os }}
+  desktop:
+    name: Release Desktop (${{ matrix.platform }})
+    needs: prepare
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
-            target: linux
-            build_script: build:linux-full
-            artifact_name: desktop-linux
-          - os: windows-latest
-            target: windows
-            build_script: build:win-full
-            artifact_name: desktop-windows
-          - os: macos-latest
-            target: macos
-            build_script: build:mac-full
-            artifact_name: desktop-macos
+          - platform: linux
+            runner: ubuntu-latest
+            command: build:linux-full
+            extension: AppImage
+          - platform: windows
+            runner: windows-latest
+            command: build:win-full
+            extension: exe
+          - platform: macos
+            runner: macos-latest
+            command: build:mac-full
+            extension: dmg
     defaults:
       run:
         working-directory: desktop
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      APPLE_ID: ${{ secrets.APPLE_ID }}
-      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        shell: bash
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
-          ref: ${{ needs.create-tag.outputs.release_tag }}
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+          persist-credentials: false
+      - uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
-
+          package-manager-cache: false
       - name: Install Linux build dependencies
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.platform == 'linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential python3 libudev-dev rpm
-
-      - name: Import Code-Signing Certificates
-        if: startsWith(matrix.os, 'macos')
+          sudo apt-get install -y build-essential python3 libudev-dev
+      - run: npm ci
+      - name: Check macOS signing configuration
+        if: matrix.platform == 'macos'
+        id: signing
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          if [[ -n "$APPLE_CERTIFICATE" && -n "$APPLE_CERTIFICATE_PASSWORD" ]]; then
+            echo 'enabled=true' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Import macOS signing certificate
+        if: steps.signing.outputs.enabled == 'true'
         uses: apple-actions/import-codesign-certs@v3
         with:
           p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
           p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      - name: Build desktop installers
+        env:
+          BUILD_COMMAND: ${{ matrix.command }}
+          SIGN_MACOS: ${{ steps.signing.outputs.enabled }}
+          APPLE_ID: ${{ steps.signing.outputs.enabled == 'true' && secrets.APPLE_ID || '' }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ steps.signing.outputs.enabled == 'true' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ steps.signing.outputs.enabled == 'true' && secrets.APPLE_TEAM_ID || '' }}
+        run: |
+          if [[ "$SIGN_MACOS" == true ]]; then
+            npm run "$BUILD_COMMAND" -- -c.dmg.sign=true
+          else
+            CSC_IDENTITY_AUTO_DISCOVERY=false npm run "$BUILD_COMMAND"
+          fi
+      - name: Upload desktop release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+          EXTENSION: ${{ matrix.extension }}
+        run: |
+          shopt -s nullglob
+          installers=(dist/*."$EXTENSION")
+          if (( ${#installers[@]} == 0 )); then
+            echo "::error::No desktop installers were generated"
+            exit 1
+          fi
+          files=("${installers[@]}" dist/*.zip dist/*.blockmap dist/latest*.yml)
+          test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true
+          gh release upload "$RELEASE_TAG" "${files[@]}" --clobber
 
-      - name: Install dependencies
-        run: npm install
-
-      - name: Build desktop package
-        run: npm run ${{ matrix.build_script }}
-
-      - name: Upload desktop artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.artifact_name }}
-          path: |
-            desktop/dist/*.exe
-            desktop/dist/*.AppImage
-            desktop/dist/*.deb
-            desktop/dist/*.rpm
-            desktop/dist/*.dmg
-            desktop/dist/*-mac.zip
-            desktop/dist/latest*.yml
-          if-no-files-found: error
-
-  create-release:
-    name: Create GitHub Release
-    needs: [create-tag, build-browser, build-desktop]
+  publish:
+    needs: [prepare, browser, desktop]
+    if: ${{ !inputs.draft }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
     steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: release-artifacts
-
-      - name: Display structure of downloaded files
-        run: ls -R release-artifacts
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: ${{ needs.create-tag.outputs.release_tag }}
-          name: ${{ needs.create-tag.outputs.release_tag }}
-          draft: ${{ inputs.draft }}
-          prerelease: ${{ inputs.prerelease }}
-          files: |
-            release-artifacts/**/*
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish the completed release
+        run: gh release edit "$RELEASE_TAG" --draft=false

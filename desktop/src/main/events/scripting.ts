@@ -71,36 +71,46 @@ function parseSaveName(name: string): { folder: string; base: string } {
   return { folder: safeSeg(name.slice(0, slash)), base: safeSeg(name.slice(slash + 1)) }
 }
 
-/** Build a full path from display name + type, creating subdirs as needed. */
-function scriptPath(name: string, type: ScriptType): string {
-  const { folder, base } = parseSaveName(name)
-  const dir = folder ? path.join(scriptsDir(), folder) : scriptsDir()
-  fs.mkdirSync(dir, { recursive: true })
-  return path.join(dir, `${base}${EXT[type]}`)
+function isInside(root: string, target: string): boolean {
+  const relative = path.relative(root, target)
+  return relative !== '' && !path.isAbsolute(relative) &&
+    relative !== '..' && !relative.startsWith('..' + path.sep)
 }
 
-/**
- * Resolve a filename that may include a folder prefix (e.g. "work/test.js")
- * to its absolute path + type.
- */
+/** Build a save path inside the configured scripts directory. */
+function scriptPath(name: string, type: ScriptType): string {
+  const { folder, base } = parseSaveName(name)
+  if (!base || !Object.hasOwn(EXT, type)) throw new Error('Invalid script name or type')
+  const root = fs.realpathSync(scriptsDir())
+  const dir = folder ? path.join(root, folder) : root
+  fs.mkdirSync(dir, { recursive: true })
+  const fullPath = path.join(fs.realpathSync(dir), base + EXT[type])
+  if (!isInside(root, fullPath) || fs.lstatSync(fullPath, { throwIfNoEntry: false })?.isSymbolicLink()) {
+    throw new Error('Invalid script path')
+  }
+  return fullPath
+}
+
+/** Resolve only regular script files under the configured directory. */
 function resolveFilename(filename: string): { fullPath: string; type: ScriptType } | null {
   const ext = path.extname(filename)
-  const type = EXT_TO_TYPE[ext]
-  if (!type) return null
-  const fullPath = path.join(scriptsDir(), filename)
-  if (!fs.existsSync(fullPath)) return null
-  return { fullPath, type }
+  if (path.isAbsolute(filename) || !Object.hasOwn(EXT_TO_TYPE, ext)) return null
+  const root = fs.realpathSync(scriptsDir())
+  const fullPath = path.resolve(root, filename)
+  if (!isInside(root, fullPath) || !fs.lstatSync(fullPath, { throwIfNoEntry: false })?.isFile()) return null
+  if (!isInside(root, fs.realpathSync(fullPath))) return null
+  return { fullPath, type: EXT_TO_TYPE[ext] }
 }
 
 // ---------------------------------------------------------------------------
 // Registration
 // ---------------------------------------------------------------------------
-export function registerScripting(win: BrowserWindow): void {
-  initCapture(win)
+export function registerScripting(getWindow: () => BrowserWindow | undefined): void {
+  initCapture(getWindow)
 
-  engine.on('progress', (p)   => win.webContents.send(IpcEvents.SCRIPT_PROGRESS, p))
-  engine.on('error',    (err: Error) => win.webContents.send(IpcEvents.SCRIPT_ERROR, err.message))
-  engine.on('log',      (msg: string) => win.webContents.send(IpcEvents.SCRIPT_LOG, msg))
+  engine.on('progress', (progress) => getWindow()?.webContents.send(IpcEvents.SCRIPT_PROGRESS, progress))
+  engine.on('error', (err: Error) => getWindow()?.webContents.send(IpcEvents.SCRIPT_ERROR, err.message))
+  engine.on('log', (message: string) => getWindow()?.webContents.send(IpcEvents.SCRIPT_LOG, message))
 
   // Execution
   ipcMain.handle(IpcEvents.SCRIPT_RUN, async (_: IpcMainInvokeEvent, source: string, forceType?: ScriptType) => {
@@ -158,7 +168,7 @@ export function registerScripting(win: BrowserWindow): void {
         for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
           if (entry.isDirectory()) {
             walk(path.join(dir, entry.name), folder ? `${folder}/${entry.name}` : entry.name)
-          } else {
+          } else if (entry.isFile()) {
             const ext = path.extname(entry.name)
             const type = EXT_TO_TYPE[ext]
             if (!type) continue

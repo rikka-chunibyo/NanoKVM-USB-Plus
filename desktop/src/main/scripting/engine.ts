@@ -248,8 +248,13 @@ export class ScriptEngine extends EventEmitter {
       this._status = signal.aborted ? 'idle' : 'done'
       this.emit('progress', this.prog(1, 1, signal.aborted ? 'Stopped' : 'Complete'))
     } catch (err) {
-      this._status = 'error'
-      this.emit('error', err)
+      if (signal.aborted) {
+        this._status = 'idle'
+        this.emit('progress', this.prog(0, 0, 'Stopped'))
+      } else {
+        this._status = 'error'
+        this.emit('error', err)
+      }
     } finally {
       this._abort = null
     }

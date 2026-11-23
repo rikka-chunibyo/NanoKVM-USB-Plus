@@ -24,7 +24,7 @@ export const Recorder = () => {
   const [elapsedMs, setElapsedMs]     = useState(0)
 
   const mediaRecorderRef = useRef<MediaRecorder>()
-  const streamIdRef      = useRef<string | null>(null)
+  const startingRef      = useRef(false)
   const timerRef         = useRef<number | null>(null)
   const startTimeRef     = useRef<number>(0)
 
@@ -38,7 +38,11 @@ export const Recorder = () => {
     timerRef.current = window.setInterval(() => setElapsedMs(Date.now() - startTimeRef.current), 1000)
   }
 
-  useEffect(() => () => { stopTimer() }, [])
+  useEffect(() => () => {
+    const recorder = mediaRecorderRef.current
+    if (recorder && recorder.state !== 'inactive') recorder.stop()
+    stopTimer()
+  }, [])
 
   const formatElapsed = (ms: number) => {
     const total = Math.floor(ms / 1000)
@@ -47,7 +51,9 @@ export const Recorder = () => {
 
   const handleStartRecording = async (e: React.MouseEvent) => {
     const stream = camera.getStream()
-    if (!stream) return
+    if (!stream || startingRef.current || mediaRecorderRef.current) return
+    startingRef.current = true
+    let openedStream: string | undefined
 
     try {
       const suggestedName = `recording-${timestamp()}.webm`
@@ -66,41 +72,60 @@ export const Recorder = () => {
         filePath = `${resolvedDir}/${suggestedName}`.replace(/\\/g, '/')
       }
 
-      const openResult = await window.electron.ipcRenderer.invoke(IpcEvents.OPEN_VIDEO_WRITE_STREAM, filePath)
-      if (!openResult.ok) { console.error('Could not open stream:', openResult.error); return }
-      streamIdRef.current = openResult.streamId
-
       const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' })
+      const openResult = await window.electron.ipcRenderer.invoke(IpcEvents.OPEN_VIDEO_WRITE_STREAM, filePath)
+      if (!openResult.ok) throw new Error(openResult.error)
+      const streamId = openResult.streamId as string
+      openedStream = streamId
 
-      recorder.ondataavailable = async (event) => {
-        if (!event.data || event.data.size === 0) return
-        if (!streamIdRef.current) { recorder.stop(); return }
-        const b64 = await blobToBase64(event.data)
-        await window.electron.ipcRenderer.invoke(IpcEvents.WRITE_VIDEO_CHUNK, streamIdRef.current, b64)
+      let queuedWrites = Promise.resolve()
+      let writeFailed = false
+      recorder.ondataavailable = (event) => {
+        if (!event.data.size) return
+        queuedWrites = queuedWrites.then(async () => {
+          if (writeFailed) return
+          const base64 = await blobToBase64(event.data)
+          const result = await window.electron.ipcRenderer.invoke(IpcEvents.WRITE_VIDEO_CHUNK, streamId, base64)
+          if (!result.ok) throw new Error(result.error)
+        }).catch((error) => {
+          writeFailed = true
+          console.error('Could not write recording:', error)
+          if (recorder.state !== 'inactive') recorder.stop()
+        })
       }
 
       recorder.onstop = async () => {
-        if (streamIdRef.current) {
-          await window.electron.ipcRenderer.invoke(IpcEvents.CLOSE_VIDEO_WRITE_STREAM, streamIdRef.current)
-          streamIdRef.current = null
+        try {
+          await queuedWrites
+          const result = await window.electron.ipcRenderer.invoke(IpcEvents.CLOSE_VIDEO_WRITE_STREAM, streamId)
+          if (!result.ok) throw new Error(result.error)
+        } catch (error) {
+          console.error('Could not finish recording:', error)
+        } finally {
+          mediaRecorderRef.current = undefined
+          stopTimer()
+          setElapsedMs(0)
+          setIsRecording(false)
         }
-        stopTimer(); setElapsedMs(0); setIsRecording(false)
       }
 
       recorder.start(1000)
       mediaRecorderRef.current = recorder
       setIsRecording(true)
       startTimer()
-    } catch (err) {
-      console.error(err)
+    } catch (error) {
+      console.error(error)
+      if (openedStream) {
+        await window.electron.ipcRenderer.invoke(IpcEvents.CLOSE_VIDEO_WRITE_STREAM, openedStream).catch(console.error)
+      }
+    } finally {
+      startingRef.current = false
     }
   }
 
   const handleStopRecording = () => {
     const recorder = mediaRecorderRef.current
-    if (recorder && recorder.state !== 'inactive') {
-      recorder.stop(); stopTimer(); setElapsedMs(0); setIsRecording(false)
-    }
+    if (recorder && recorder.state !== 'inactive') recorder.stop()
   }
 
   const tooltipTitle = (
